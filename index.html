@@ -3,11 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BeeLadybug — Core sandbox</title>
+    <title>BeeLadybug — CanvasAdapter</title>
     <style>
-        :root {
-            color-scheme: dark;
-        }
+        :root { color-scheme: dark; }
         body {
             margin: 0;
             min-height: 100vh;
@@ -16,7 +14,6 @@
             font-family: system-ui, -apple-system, sans-serif;
         }
         main {
-            max-width: 720px;
             margin: 0;
             padding: 28px 24px 48px 400px;
         }
@@ -27,53 +24,17 @@
         }
         .lede {
             color: #a4b0be;
-            margin: 0 0 1.5rem;
-            max-width: 54ch;
+            margin: 0 0 1.2rem;
+            max-width: 58ch;
         }
-        .host {
-            background: #15161c;
+        canvas {
+            display: block;
+            background: #1e1e24;
             border: 1px solid #2f3542;
-            padding: 16px 18px;
-            margin-bottom: 1rem;
+            max-width: 100%;
+            height: auto;
         }
-        .host-label {
-            font-family: ui-monospace, Consolas, monospace;
-            font-size: 11px;
-            letter-spacing: 0.12em;
-            color: #747d8c;
-            margin-bottom: 10px;
-        }
-        .pulse {
-            width: 48px;
-            height: 48px;
-            background: #3498db;
-            display: inline-block;
-            vertical-align: middle;
-            margin-right: 14px;
-            transform-origin: center center;
-        }
-        .host-meta {
-            display: inline-block;
-            vertical-align: middle;
-            font-family: ui-monospace, Consolas, monospace;
-            font-size: 13px;
-            color: #dfe4ea;
-        }
-        .row {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-            margin: 1rem 0;
-        }
-        button {
-            background: #2f3542;
-            color: #fff;
-            border: 1px solid #57606f;
-            padding: 8px 12px;
-            font: 600 13px system-ui, sans-serif;
-            cursor: pointer;
-        }
-        button:hover { border-color: #ff4757; }
+        .hint { color: #747d8c; font-size: 0.92rem; margin-top: 1rem; }
         kbd {
             background: #2f3542;
             color: #fff;
@@ -81,37 +42,31 @@
             border-radius: 4px;
             font-size: 0.85em;
         }
-        .hint { color: #747d8c; font-size: 0.92rem; }
         code { color: #ffd36a; }
+        a { color: #6ee7ff; }
+        .swatch { display: inline-block; width: 8px; height: 8px; margin: 0 4px 0 10px; }
+        .swatch.ok { background: #3dff6a; }
+        .swatch.hit { background: #ff3b3b; }
+        .swatch.npc { background: #e67e22; }
     </style>
 </head>
 <body>
     <main>
-        <h1>BeeLadybug Core</h1>
+        <h1>CanvasAdapter</h1>
         <p class="lede">
-            Sandbox del cervello universale. Nessun adapter Canvas: tre sorgenti fittizie
-            (simulatore FPS, puntatore DOM, pipeline AI) parlano solo con
-            <code>sendData(type, payload)</code>.
+            Il gioco disegna quadrati. L'adapter legge le hitbox, calcola le
+            collisioni e manda pacchetti al Core. Il Core non sa che esiste un canvas.
+            <span class="swatch ok"></span>ok
+            <span class="swatch hit"></span>collide
+            <span class="swatch npc"></span>patrol
         </p>
-
-        <div class="host">
-            <div class="host-label">HOST WORLD · ascolta sys/freeze del Core</div>
-            <span class="pulse" id="pulse"></span>
-            <span class="host-meta" id="host-meta">RUN</span>
-        </div>
-
-        <div class="row">
-            <button id="inject-fps" type="button">Inietta FPS</button>
-            <button id="inject-log" type="button">Inietta log</button>
-            <button id="inject-error" type="button">Inietta errore AI</button>
-            <button id="clear-logs" type="button">Pulisci console</button>
-        </div>
-
+        <canvas id="appCanvas" width="800" height="420"></canvas>
         <p class="hint">
-            <kbd>F2</kbd> overlay · <kbd>F3</kbd> slow · <kbd>F4</kbd> freeze.
-            Oggetto globale: <code>window.bee</code>
+            Muovi il mouse sul canvas. <kbd>F2</kbd> overlay+hitbox ·
+            <kbd>F3</kbd> slow · <kbd>F4</kbd> freeze.
+            Core puro: <a href="./examples/core.html">sandbox</a>
         </p>
     </main>
-    <script type="module" src="./examples/core-sandbox.js"></script>
+    <script type="module" src="./examples/canvas-sandbox.js"></script>
 </body>
 </html>

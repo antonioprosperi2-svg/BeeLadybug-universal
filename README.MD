@@ -31,12 +31,14 @@ bee-ladybug/
 │   │   ├── BeeLadybugCore.js    # stato, clock, sendData
 │   │   └── UIOverlay.js         # console scura + sparkline
 │   └── adapters/
-│       ├── CanvasAdapter.js     # prossimo: hitbox / giochi
+│       ├── CanvasAdapter.js     # hitbox / FPS / collisioni Canvas 2D
 │       ├── WebDOMAdapter.js     # prossimo: layout HTML
 │       └── python/
 │           └── PythonBridge.js  # futuro: WebSocket → sendData
 ├── examples/
-│   └── core-sandbox.js          # demo senza adapter
+│   ├── core-sandbox.js          # demo senza adapter
+│   ├── core.html
+│   └── canvas-sandbox.js        # demo CanvasAdapter
 ├── index.html
 ├── package.json
 └── README.md
@@ -111,11 +113,38 @@ bee.subscribe((packet) => {
 
 | Tasto | Azione |
 | --- | --- |
-| `F2` | mostra / nascondi overlay |
+| `F2` | mostra / nascondi overlay (e hitbox canvas) |
 | `F3` | slow-motion del tempo fittizio (`0.25x` / `1x`) |
 | `F4` | freeze / run del tempo fittizio |
 
 Niente `F12`, niente tilde: sui layout italiani la tilde non è un tasto unico.
+
+## CanvasAdapter
+
+```js
+import { BeeLadybugCore, CanvasAdapter } from './src/index.js';
+
+const bee = new BeeLadybugCore();
+const adapter = new CanvasAdapter(bee, {
+  canvas,                 // HTMLCanvasElement del gioco
+  entities,               // array di AABB, tenuto per riferimento
+  overlay: true,          // hitbox su canvas stacked (default)
+  computeCollisions: true
+});
+adapter.attach();
+
+function loop() {
+  if (!adapter.frozen) updateGame(adapter.timeScale);
+  drawGame();
+  adapter.pump();           // una volta per frame host
+  requestAnimationFrame(loop);
+}
+```
+
+L'adapter accetta oggetti qualsiasi con `x/y/width/height` (o `worldX/worldY`).
+Disegna le hitbox su un canvas trasparente sopra il gioco: verde = ok, rosso = collide.
+Espone `frozen` e `timeScale` così l'host può mettere in pausa la simulazione.
+Pacchetti: `fps`, `metric entities`, `metric hits`, `coord` del player, `warn` all'ingresso collisione.
 
 ## API Core
 
@@ -147,14 +176,14 @@ bee.destroy();
 
 ## Roadmap
 
-1. **Ora** — Core + overlay + sandbox. Fatto.
-2. **CanvasAdapter** — hitbox, collisioni, FPS host dal game loop.
-3. **WebDOMAdapter** — box model, nodo sotto il puntatore, mutazioni.
-4. **PythonBridge** — WebSocket JSON `{ type, payload }` verso `sendData`.
-5. **Pacchetto npm** — `import { BeeLadybugCore } from 'bee-ladybug'`.
+1. **Ora** — Core + overlay + CanvasAdapter. Fatto.
+2. **WebDOMAdapter** — box model, nodo sotto il puntatore, mutazioni.
+3. **PythonBridge** — WebSocket JSON `{ type, payload }` verso `sendData`.
+4. **Pacchetto npm** — `import { BeeLadybugCore } from 'bee-ladybug'`.
 
 ## Come contribuire
 
 Il Core resta cieco. Se una feature ha bisogno di conoscere Canvas, DOM o
 Python, vive in un adapter. Patch al Core solo per clock, buffer, protocollo
 o UI condivisa.
+

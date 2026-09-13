@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BeeLadybug — Core sandbox</title>
+    <style>
+        :root { color-scheme: dark; }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            background: #0b0b0e;
+            color: #f1f2f6;
+            font-family: system-ui, -apple-system, sans-serif;
+        }
+        main {
+            max-width: 720px;
+            margin: 0;
+            padding: 28px 24px 48px 400px;
+        }
+        h1 { color: #ff4757; font-size: 1.7rem; margin: 0 0 0.4rem; }
+        .lede { color: #a4b0be; margin: 0 0 1.5rem; max-width: 54ch; }
+        .host {
+            background: #15161c;
+            border: 1px solid #2f3542;
+            padding: 16px 18px;
+            margin-bottom: 1rem;
+        }
+        .host-label {
+            font-family: ui-monospace, Consolas, monospace;
+            font-size: 11px;
+            letter-spacing: 0.12em;
+            color: #747d8c;
+            margin-bottom: 10px;
+        }
+        .pulse {
+            width: 48px;
+            height: 48px;
+            background: #3498db;
+            display: inline-block;
+            vertical-align: middle;
+            margin-right: 14px;
+            transform-origin: center center;
+        }
+        .host-meta {
+            display: inline-block;
+            vertical-align: middle;
+            font-family: ui-monospace, Consolas, monospace;
+            font-size: 13px;
+            color: #dfe4ea;
+        }
+        .row { display: flex; flex-wrap: wrap; gap: 8px; margin: 1rem 0; }
+        button {
+            background: #2f3542;
+            color: #fff;
+            border: 1px solid #57606f;
+            padding: 8px 12px;
+            font: 600 13px system-ui, sans-serif;
+            cursor: pointer;
+        }
+        button:hover { border-color: #ff4757; }
+        kbd {
+            background: #2f3542;
+            color: #fff;
+            padding: 0.15rem 0.4rem;
+            border-radius: 4px;
+            font-size: 0.85em;
+        }
+        .hint { color: #747d8c; font-size: 0.92rem; }
+        code { color: #ffd36a; }
+        a { color: #6ee7ff; }
+    </style>
+</head>
+<body>
+    <main>
+        <h1>BeeLadybug Core</h1>
+        <p class="lede">
+            Sandbox senza adapter Canvas. Tre sorgenti fittizie parlano solo con
+            <code>sendData(type, payload)</code>.
+            Demo hitbox: <a href="../index.html">CanvasAdapter</a>.
+        </p>
+        <div class="host">
+            <div class="host-label">HOST WORLD · ascolta sys/freeze del Core</div>
+            <span class="pulse" id="pulse"></span>
+            <span class="host-meta" id="host-meta">RUN</span>
+        </div>
+        <div class="row">
+            <button id="inject-fps" type="button">Inietta FPS</button>
+            <button id="inject-log" type="button">Inietta log</button>
+            <button id="inject-error" type="button">Inietta errore AI</button>
+            <button id="clear-logs" type="button">Pulisci console</button>
+        </div>
+        <p class="hint">
+            <kbd>F2</kbd> overlay · <kbd>F3</kbd> slow · <kbd>F4</kbd> freeze.
+            Oggetto globale: <code>window.bee</code>
+        </p>
+    </main>
+    <script type="module" src="./core-sandbox.js"></script>
+</body>
+</html>
