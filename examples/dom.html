@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BeeLadybug — WebDOMAdapter</title>
+    <style>
+        :root { color-scheme: dark; }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            background: #0b0b0e;
+            color: #f1f2f6;
+            font-family: system-ui, -apple-system, sans-serif;
+        }
+        main {
+            margin: 0;
+            padding: 28px 24px 48px 400px;
+        }
+        h1 {
+            color: #ff4757;
+            font-size: 1.7rem;
+            margin: 0 0 0.4rem;
+        }
+        .lede {
+            color: #a4b0be;
+            margin: 0 0 1.2rem;
+            max-width: 58ch;
+        }
+        #stage {
+            max-width: 720px;
+        }
+        .toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin: 0 0 1rem;
+        }
+        button {
+            background: #2f3542;
+            color: #fff;
+            border: 1px solid #57606f;
+            padding: 8px 12px;
+            font: 600 13px system-ui, sans-serif;
+            cursor: pointer;
+        }
+        button:hover { border-color: #ff4757; }
+        #cta {
+            display: inline-block;
+            margin: 0 0 1rem;
+            padding: 12px 18px;
+            background: #ff4757;
+            color: #fff;
+            font-weight: 700;
+            border-radius: 4px;
+        }
+        #cta.wide { padding: 12px 64px; }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 12px;
+        }
+        .card {
+            background: #15161c;
+            border: 1px solid #2f3542;
+            padding: 14px 16px;
+            margin: 0;
+        }
+        .card h2 {
+            font-size: 1rem;
+            margin: 0 0 0.4rem;
+            color: #ffd36a;
+        }
+        .card p {
+            margin: 0;
+            color: #a4b0be;
+            font-size: 0.9rem;
+        }
+        .hint { color: #747d8c; font-size: 0.92rem; margin-top: 1rem; }
+        kbd {
+            background: #2f3542;
+            color: #fff;
+            padding: 0.15rem 0.4rem;
+            border-radius: 4px;
+            font-size: 0.85em;
+        }
+        code { color: #ffd36a; }
+        a { color: #6ee7ff; }
+        .swatch { display: inline-block; width: 8px; height: 8px; margin: 0 4px 0 10px; }
+        .swatch.hover { background: #6ee7ff; }
+        .swatch.watch { background: #3dff6a; }
+        .swatch.margin { background: #ffd36a; }
+    </style>
+</head>
+<body>
+    <main>
+        <h1>WebDOMAdapter</h1>
+        <p class="lede">
+            Pagina HTML vera. L'adapter legge box model, nodo sotto il puntatore
+            e mutazioni. Il Core non sa che esiste il DOM.
+            <span class="swatch hover"></span>hover
+            <span class="swatch watch"></span>watch
+            <span class="swatch margin"></span>margin
+        </p>
+        <div id="stage">
+            <div class="toolbar">
+                <button id="add-card" type="button">Aggiungi card</button>
+                <button id="bump-cta" type="button">Allarga CTA</button>
+            </div>
+            <div id="cta">Call to action</div>
+            <div class="grid" id="cards">
+                <article class="card">
+                    <h2>Card 1</h2>
+                    <p>Passa il mouse qui. Dovresti vedere padding, content e label.</p>
+                </article>
+                <article class="card">
+                    <h2>Card 2</h2>
+                    <p>Le card in watch hanno il bordo verde anche senza hover.</p>
+                </article>
+                <article class="card">
+                    <h2>Card 3</h2>
+                    <p>F4 congela il target: il highlight resta sul nodo precedente.</p>
+                </article>
+            </div>
+        </div>
+        <p class="hint">
+            <kbd>F2</kbd> overlay+highlight · <kbd>F3</kbd> slow · <kbd>F4</kbd> freeze hover.
+            <a href="../index.html">Canvas</a> ·
+            <a href="./core.html">Core</a>
+        </p>
+    </main>
+    <script type="module" src="./dom-sandbox.js"></script>
+</body>
+</html>

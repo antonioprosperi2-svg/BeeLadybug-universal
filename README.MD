@@ -32,13 +32,15 @@ bee-ladybug/
 │   │   └── UIOverlay.js         # console scura + sparkline
 │   └── adapters/
 │       ├── CanvasAdapter.js     # hitbox / FPS / collisioni Canvas 2D
-│       ├── WebDOMAdapter.js     # prossimo: layout HTML
+│       ├── WebDOMAdapter.js     # box model / hover / mutazioni HTML
 │       └── python/
 │           └── PythonBridge.js  # futuro: WebSocket → sendData
 ├── examples/
 │   ├── core-sandbox.js          # demo senza adapter
 │   ├── core.html
-│   └── canvas-sandbox.js        # demo CanvasAdapter
+│   ├── canvas-sandbox.js        # demo CanvasAdapter
+│   ├── dom-sandbox.js
+│   └── dom.html
 ├── index.html
 ├── package.json
 └── README.md
@@ -146,6 +148,23 @@ Disegna le hitbox su un canvas trasparente sopra il gioco: verde = ok, rosso = c
 Espone `frozen` e `timeScale` così l'host può mettere in pausa la simulazione.
 Pacchetti: `fps`, `metric entities`, `metric hits`, `coord` del player, `warn` all'ingresso collisione.
 
+## WebDOMAdapter
+
+```js
+import { BeeLadybugCore, WebDOMAdapter } from './src/index.js';
+
+const bee = new BeeLadybugCore();
+const adapter = new WebDOMAdapter(bee, {
+  root: document.body,     // sottoalbero da ispezionare
+  watch: ['.card', '#cta'],
+  overlay: true,
+  autoTick: true           // non serve un game loop
+});
+adapter.attach();
+```
+
+Traduce il DOM in pacchetti: nodo sotto il puntatore, box model (margin / padding / content), conteggio nodi, mutazioni (`+n -n attr`). `F4` congela l'hover. `F2` nasconde overlay e highlight. Il Core non sa che esiste HTML.
+
 ## API Core
 
 ```js
@@ -176,10 +195,9 @@ bee.destroy();
 
 ## Roadmap
 
-1. **Ora** — Core + overlay + CanvasAdapter. Fatto.
-2. **WebDOMAdapter** — box model, nodo sotto il puntatore, mutazioni.
-3. **PythonBridge** — WebSocket JSON `{ type, payload }` verso `sendData`.
-4. **Pacchetto npm** — `import { BeeLadybugCore } from 'bee-ladybug'`.
+1. **Ora** — Core + overlay + CanvasAdapter + WebDOMAdapter. Fatto.
+2. **PythonBridge** — WebSocket JSON `{ type, payload }` verso `sendData`.
+3. **Pacchetto npm** — `import { BeeLadybugCore } from 'bee-ladybug'`.
 
 ## Come contribuire
 
