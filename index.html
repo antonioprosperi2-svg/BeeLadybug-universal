@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="it">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BeeLadybug — Universal Debugger Test</title>
+    <style>
+        body {
+            background-color: #0b0b0e;
+            color: #f1f2f6;
+            font-family: system-ui, -apple-system, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+
+        h1 {
+            color: #ff4757;
+            font-size: 1.8rem;
+            margin-bottom: 0.5rem;
+        }
+
+        p {
+            color: #a4b0be;
+            margin-bottom: 1.5rem;
+        }
+
+        canvas {
+            background-color: #1e1e24;
+            border: 2px solid #2f3542;
+            border-radius: 8px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+        }
+
+        .controls-info {
+            margin-top: 1rem;
+            font-size: 0.9rem;
+            color: #747d8c;
+        }
+
+        kbd {
+            background: #2f3542;
+            color: white;
+            padding: 0.2rem 0.4rem;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h1>🐞 BeeLadybug Universal</h1>
+    <p>Test dell'ispettore grafico indipendente su un Canvas generico</p>
+
+    <!-- Il Canvas del finto gioco esterno -->
+    <canvas id="appCanvas" width="800" height="500"></canvas>
+
+    <div class="controls-info">
+        Premi <kbd>F2</kbd> per nascondere/mostrare il pannello. Muovi il quadrato con il mouse.
+    </div>
+
+    <!-- Carichiamo il Main che farà girare la demo e inizializzerà BeeLadybug -->
+    <script type="module" src="main.js"></script>
+
+</body>
+
+</html>
