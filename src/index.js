@@ -2,3 +2,4 @@ export { BeeLadybugCore, BEE_LADYBUG_VERSION, CORE_DEFAULTS, WELL_KNOWN_TYPES, f
 export { UIOverlay } from './core/UIOverlay.js';
 export { CanvasAdapter, CANVAS_ADAPTER_DEFAULTS } from './adapters/CanvasAdapter.js';
 export { WebDOMAdapter, WEB_DOM_ADAPTER_DEFAULTS } from './adapters/WebDOMAdapter.js';
+export { PythonBridge, PYTHON_BRIDGE_DEFAULTS } from './adapters/python/PythonBridge.js';

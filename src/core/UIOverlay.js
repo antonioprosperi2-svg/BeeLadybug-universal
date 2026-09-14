@@ -169,6 +169,7 @@ const STYLES = `
 .bl-foot {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
   padding: 8px 10px;
   border-top: 1px solid rgba(255, 59, 78, 0.22);
@@ -205,7 +206,7 @@ export class UIOverlay {
      */
     constructor(core, options = {}) {
         this.core = core;
-        this.#options = options;
+        void options;
         this.#host = null;
         this.#root = null;
         this.#els = null;
@@ -214,7 +215,6 @@ export class UIOverlay {
         this.#mounted = false;
     }
 
-    #options;
     #host;
     #root;
     #els;
@@ -268,6 +268,7 @@ export class UIOverlay {
                   <button class="bl-btn" data-act="slow" type="button">F3 SLOW</button>
                   <button class="bl-btn" data-act="freeze" type="button">F4 STOP</button>
                   <button class="bl-btn" data-act="live" type="button">1x LIVE</button>
+                  <button class="bl-btn" data-act="ask" type="button">ASK AI</button>
                   <span class="bl-hint">F2 overlay</span>
                 </div>
               </div>
@@ -295,6 +296,7 @@ export class UIOverlay {
             if (act === 'slow') this.core.applySlowMo();
             else if (act === 'freeze') this.core.toggleFreeze();
             else if (act === 'live') this.core.restoreRealtime();
+            else if (act === 'ask') this.core.ask();
         });
 
         this.#els.console.addEventListener('scroll', () => {
@@ -415,6 +417,11 @@ export class UIOverlay {
         freeze.dataset.hot = state.frozen ? 'true' : 'false';
         slow.dataset.hot = !state.frozen && state.timeScale !== 1 ? 'true' : 'false';
         live.dataset.hot = !state.frozen && state.timeScale === 1 ? 'true' : 'false';
+        const ask = this.#root.querySelector('[data-act="ask"]');
+        if (ask) {
+            ask.dataset.hot = this.core.hasAssistant ? 'true' : 'false';
+            ask.disabled = Boolean(this.core.assistantBusy);
+        }
     }
 
     #paintGraph(series) {

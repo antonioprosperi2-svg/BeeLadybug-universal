@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BeeLadybug — PythonBridge</title>
+    <style>
+        :root { color-scheme: dark; }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            background: #0b0b0e;
+            color: #f1f2f6;
+            font-family: system-ui, -apple-system, sans-serif;
+        }
+        main {
+            margin: 0;
+            padding: 28px 24px 48px 400px;
+            max-width: 1100px;
+        }
+        h1 {
+            color: #ff4757;
+            font-size: 1.7rem;
+            margin: 0 0 0.4rem;
+        }
+        .lede {
+            color: #a4b0be;
+            margin: 0 0 1.2rem;
+            max-width: 62ch;
+        }
+        .row { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 1rem; }
+        button {
+            background: #2f3542;
+            color: #fff;
+            border: 1px solid #57606f;
+            padding: 8px 12px;
+            font: 600 13px system-ui, sans-serif;
+            cursor: pointer;
+        }
+        button:hover { border-color: #ff4757; }
+        .status {
+            font-family: ui-monospace, Consolas, monospace;
+            font-size: 13px;
+            color: #ffd36a;
+            margin-bottom: 1rem;
+        }
+        pre {
+            background: #15161c;
+            border: 1px solid #2f3542;
+            padding: 12px 14px;
+            color: #dfe4ea;
+            overflow: auto;
+            font-size: 12px;
+        }
+        .hint { color: #747d8c; font-size: 0.92rem; margin-top: 1rem; }
+        kbd {
+            background: #2f3542;
+            color: #fff;
+            padding: 0.15rem 0.4rem;
+            border-radius: 4px;
+            font-size: 0.85em;
+        }
+        code { color: #ffd36a; }
+        a { color: #6ee7ff; }
+    </style>
+</head>
+<body>
+    <main>
+        <h1>PythonBridge</h1>
+        <p class="lede">
+            Python non disegna l'overlay. Manda JSON su WebSocket; il bridge chiama
+            <code>sendData()</code>. I pulsanti mock usano lo stesso parser, senza processo Python.
+            In questa demo c'è un assistente <code>mock</code>: premi ASK AI sull'overlay.
+        </p>
+        <div class="status">py.status <span id="py-status">IDLE</span></div>
+        <div class="row">
+            <button id="py-connect" type="button">Connect ws://127.0.0.1:8765</button>
+            <button id="py-disconnect" type="button">Disconnect</button>
+            <button id="py-log" type="button">Mock log</button>
+            <button id="py-metric" type="button">Mock loss</button>
+            <button id="py-error" type="button">Mock errore AI</button>
+        </div>
+        <pre>python examples/python/sender.py</pre>
+        <p class="hint">
+            <kbd>F2</kbd> overlay · <kbd>F3</kbd> slow · <kbd>F4</kbd> freeze.
+            <a href="../index.html">Canvas</a> ·
+            <a href="./dom.html">DOM</a> ·
+            <a href="./core.html">Core</a>
+        </p>
+    </main>
+    <script type="module" src="./python-sandbox.js"></script>
+</body>
+</html>

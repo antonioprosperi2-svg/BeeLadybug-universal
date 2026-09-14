@@ -27,22 +27,24 @@ funziona sopra un gioco, sopra una pagina, o da solo in una sandbox.
 bee-ladybug/
 ├── src/
 │   ├── index.js                 # API pubblica
+│   ├── index.d.ts               # tipi npm / tsc
 │   ├── core/
-│   │   ├── BeeLadybugCore.js    # stato, clock, sendData
-│   │   └── UIOverlay.js         # console scura + sparkline
+│   │   ├── BeeLadybugCore.js
+│   │   └── UIOverlay.js
 │   └── adapters/
-│       ├── CanvasAdapter.js     # hitbox / FPS / collisioni Canvas 2D
-│       ├── WebDOMAdapter.js     # box model / hover / mutazioni HTML
-│       └── python/
-│           └── PythonBridge.js  # futuro: WebSocket → sendData
+│       ├── CanvasAdapter.js
+│       ├── WebDOMAdapter.js
+│       └── python/PythonBridge.js
 ├── examples/
-│   ├── core-sandbox.js          # demo senza adapter
 │   ├── core.html
-│   ├── canvas-sandbox.js        # demo CanvasAdapter
-│   ├── dom-sandbox.js
-│   └── dom.html
-├── index.html
+│   ├── canvas-sandbox.js
+│   ├── dom.html
+│   ├── python.html
+│   └── python/sender.py
+├── tsconfig.json
 ├── package.json
+├── LICENSE
+├── index.html
 └── README.md
 ```
 
@@ -165,6 +167,91 @@ adapter.attach();
 
 Traduce il DOM in pacchetti: nodo sotto il puntatore, box model (margin / padding / content), conteggio nodi, mutazioni (`+n -n attr`). `F4` congela l'hover. `F2` nasconde overlay e highlight. Il Core non sa che esiste HTML.
 
+## PythonBridge
+
+Python non vede l'overlay. Manda JSON. Il browser lo srotola in `sendData()`.
+
+```js
+import { BeeLadybugCore, PythonBridge } from './src/index.js';
+
+const bee = new BeeLadybugCore();
+const bridge = new PythonBridge(bee, { url: 'ws://127.0.0.1:8765' });
+bridge.connect();
+
+// stesso parser, senza socket:
+bridge.ingest({ type: 'metric', payload: { name: 'loss', value: 0.12 } });
+```
+
+Forma del filo:
+
+```json
+{ "type": "log", "payload": { "message": "epoch 3" } }
+{ "type": "error", "message": "CUDA OOM" }
+```
+
+Sender di esempio (solo stdlib, nessun pip):
+
+```bash
+python examples/python/sender.py
+```
+
+Poi aprire `http://localhost:8080/examples/python.html` e Connect. I pulsanti mock funzionano anche a processo spento.
+
+## npm / TypeScript
+
+```bash
+npm install
+npm run typecheck
+```
+
+```js
+import { BeeLadybugCore } from 'bee-ladybug';
+```
+
+Il runtime resta JavaScript ESM. I tipi stanno in `src/index.d.ts` (`package.json` → `"types"`).
+Keyword e repository puntano a **BeeLadybug-universal**, non a BeeEngine.
+
+```bash
+npm run typecheck
+npm run lint
+```
+
+Versione runtime e pacchetto: **0.2.0** (`BEE_LADYBUG_VERSION` e `package.json` devono restare uguali). Su npm ora risulta `0.1.0`: il prossimo `npm publish` sarà `0.2.0`.
+
+## Assistente AI (gancio, nessun vendor)
+
+BeeLadybug **non** chiama OpenAI, Claude o Ollama. Lo sviluppatore innesta il proprio modello:
+
+```js
+bee.setAssistant({
+  name: 'ollama',
+  async complete({ question, snapshot }) {
+    const res = await fetch('http://127.0.0.1:11434/api/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'llama3',
+        prompt: `${question}\n${JSON.stringify(snapshot)}`,
+        stream: false
+      })
+    });
+    const data = await res.json();
+    return data.response;
+  }
+});
+
+await bee.ask('perché il loss sale?');
+```
+
+Il Core manda un **snapshot** (log recenti, HUD, metriche) a `complete()`. Chiavi tipo `token`/`password` vengono redacted. In overlay: pulsante **ASK AI**. Senza `setAssistant`, il bottone spiega come collegarlo.
+
+## API Core
+
+```bash
+npm login
+npm publish --access public
+```
+
 ## API Core
 
 ```js
@@ -190,14 +277,15 @@ bee.getHud();
 bee.show(); bee.hide(); bee.toggle();
 bee.freeze(); bee.unfreeze(); bee.toggleFreeze();
 bee.applySlowMo(); bee.restoreRealtime();
+bee.setAssistant({ name: 'mock', complete: async ({ snapshot }) => 'ok' });
+await bee.ask('why fps drop?');
 bee.destroy();
 ```
 
 ## Roadmap
 
-1. **Ora** — Core + overlay + CanvasAdapter + WebDOMAdapter. Fatto.
-2. **PythonBridge** — WebSocket JSON `{ type, payload }` verso `sendData`.
-3. **Pacchetto npm** — `import { BeeLadybugCore } from 'bee-ladybug'`.
+1. **Ora** — Core, adapter, PythonBridge, tipi, ESLint, gancio AI. Fatto.
+2. **npm 0.2.0** — `npm publish` (registry è ancora 0.1.0).
 
 ## Come contribuire
 

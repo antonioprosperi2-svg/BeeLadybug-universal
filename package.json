@@ -1,23 +1,56 @@
 {
   "name": "bee-ladybug",
-  "version": "0.1.0",
-  "description": "Universal telemetry and visual inspection overlay for Canvas, DOM, bots, Python and AI flows.",
+  "version": "0.2.0",
+  "description": "Universal telemetry and visual inspection overlay for Canvas, DOM, Python and AI flows.",
   "type": "module",
   "main": "src/index.js",
   "module": "src/index.js",
+  "types": "src/index.d.ts",
   "exports": {
-    ".": "./src/index.js"
+    ".": {
+      "types": "./src/index.d.ts",
+      "import": "./src/index.js",
+      "default": "./src/index.js"
+    }
   },
   "files": [
     "src"
   ],
-  "license": "MIT",
+    "scripts": {
+        "typecheck": "tsc --noEmit",
+        "lint": "eslint src examples",
+        "test": "node --test tests/**/*.test.js"
+    },
   "keywords": [
     "debug",
     "telemetry",
     "overlay",
     "observability",
+    "devtools",
     "canvas",
-    "devtools"
-  ]
+    "dom",
+    "python",
+    "websocket",
+    "ai",
+    "esm"
+  ],
+  "author": "Antonio Prosperi",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/antonioprosperi2-svg/BeeLadybug-universal.git"
+  },
+  "bugs": {
+    "url": "https://github.com/antonioprosperi2-svg/BeeLadybug-universal/issues"
+  },
+  "homepage": "https://github.com/antonioprosperi2-svg/BeeLadybug-universal#readme",
+  "engines": {
+    "node": ">=18"
+  },
+    "devDependencies": {
+        "@eslint/js": "^9.36.0",
+        "eslint": "^10.8.1",
+        "globals": "^16.0.0",
+        "typescript": "^5.7.0"
+    }
 }

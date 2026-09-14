@@ -7,8 +7,9 @@
  */
 
 import { UIOverlay } from './UIOverlay.js';
+import { buildAssistantSnapshot, normalizeAssistant } from './AiAssistant.js';
 
-export const BEE_LADYBUG_VERSION = '0.1.0';
+export const BEE_LADYBUG_VERSION = '0.2.0';
 
 export const CORE_DEFAULTS = Object.freeze({
     toggleKey: 'F2',
@@ -92,6 +93,8 @@ export class BeeLadybugCore {
         this.#onKeyDown = (event) => this.#handleKey(event);
         this.#onTick = (now) => this.#tick(now);
         this.#started = false;
+        this.#assistant = null;
+        this.#askBusy = false;
 
         this.ui = null;
         if (cfg.ui !== false && typeof document !== 'undefined') {
@@ -121,6 +124,8 @@ export class BeeLadybugCore {
     #onKeyDown;
     #onTick;
     #started;
+    #assistant;
+    #askBusy;
 
     /**
      * Public adapter contract. `type` is a channel name; `payload` is raw data.
@@ -152,6 +157,87 @@ export class BeeLadybugCore {
         this.#listeners.add(handler);
         return () => this.#listeners.delete(handler);
     }
+
+    get hasAssistant() {
+        return Boolean(this.#assistant);
+    }
+
+    get assistantBusy() {
+        return this.#askBusy;
+    }
+
+    /**
+     * Plug in any model. BeeLadybug does not call OpenAI/Ollama itself.
+     * @param {{ name?: string, complete: (input: { question: string, snapshot: object }) => unknown }} provider
+     */
+    setAssistant(provider) {
+        const next = normalizeAssistant(provider);
+        if (!next) {
+            this.sendData('warn', {
+                source: 'ai',
+                message: 'setAssistant() needs { complete(ctx) }. No vendor is bundled.'
+            });
+            return this;
+        }
+        this.#assistant = next;
+        this.sendData('state', { source: 'ai', key: 'ai.assist', value: next.name });
+        this.sendData('log', {
+            source: 'ai',
+            message: `assistant ready (${next.name})`
+        });
+        return this;
+    }
+
+    clearAssistant() {
+        this.#assistant = null;
+        this.sendData('state', { source: 'ai', key: 'ai.assist', value: 'off' });
+        return this;
+    }
+
+    /**
+     * Send recent telemetry to the registered assistant and print the answer.
+     * @param {string} [question]
+     * @returns {Promise<string|null>}
+     */
+    async ask(question = 'Diagnose the current telemetry.') {
+        if (!this.#assistant) {
+            this.sendData('warn', {
+                source: 'ai',
+                message: 'No assistant. bee.setAssistant({ name, complete }) then ASK AI.'
+            });
+            return null;
+        }
+        if (this.#askBusy) {
+            this.sendData('warn', { source: 'ai', message: 'assistant busy' });
+            return null;
+        }
+        const q = String(question || 'Diagnose the current telemetry.');
+        this.#askBusy = true;
+        this.sendData('state', { source: 'ai', key: 'ai.assist', value: 'thinking' });
+        this.sendData('log', { source: 'ai', message: `ask: ${q}` });
+        try {
+            const snapshot = buildAssistantSnapshot(this, q);
+            const raw = await this.#assistant.complete({ question: q, snapshot });
+            const text = String(raw ?? '').trim() || '(empty answer)';
+            this.sendData('log', { source: 'ai', message: text });
+            this.sendData('state', { source: 'ai', key: 'ai.assist', value: this.#assistant.name });
+            return text;
+        } catch (err) {
+            this.sendData('error', {
+                source: 'ai',
+                message: err instanceof Error ? err.message : String(err)
+            });
+            this.sendData('state', {
+                source: 'ai',
+                key: 'ai.assist',
+                value: this.#assistant?.name ?? 'error'
+            });
+            return null;
+        } finally {
+            this.#askBusy = false;
+        }
+    }
+
 
     start() {
         if (this.#started) return this;
@@ -194,6 +280,8 @@ export class BeeLadybugCore {
         this.#history.clear();
         this.#hud.clear();
         this.#latest.clear();
+        this.#assistant = null;
+        this.#askBusy = false;
         this.ui?.destroy();
         this.ui = null;
         return this;
@@ -276,7 +364,8 @@ export class BeeLadybugCore {
             coreFps: this.coreFps,
             logCount: this.#logs.length,
             hud: this.getHud(),
-            mode: this.#modeLabel()
+            mode: this.#modeLabel(),
+            assistant: this.#assistant ? this.#assistant.name : null
         };
     }
 
