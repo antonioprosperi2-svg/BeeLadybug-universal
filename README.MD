@@ -116,6 +116,8 @@ bee.subscribe((packet) => {
 });
 ```
 
+![Overlay Core: la ⓘ accanto a LIVE spiega che il freeze ferma solo il clock fittizio](docs/overlay-core.jpg)
+
 ## Tasti
 
 | Tasto | Azione |
@@ -199,6 +201,8 @@ python examples/python/sender.py
 ```
 
 Poi aprire `http://localhost:8080/examples/python.html` e Connect. I pulsanti mock funzionano anche a processo spento.
+
+![Overlay PythonBridge: ASK AI e quadratini mock/echo per scegliere il provider](docs/overlay-python.jpg)
 
 ## npm / TypeScript
 
