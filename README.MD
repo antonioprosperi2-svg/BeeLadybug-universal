@@ -1,4 +1,7 @@
+
 # BeeLadybug
+(<Screenshot 2026-09-15 194620.jpg>)
+
 
 Universal telemetry and visual inspection overlay.
 
@@ -168,7 +171,7 @@ adapter.attach();
 Traduce il DOM in pacchetti: nodo sotto il puntatore, box model (margin / padding / content), conteggio nodi, mutazioni (`+n -n attr`). `F4` congela l'hover. `F2` nasconde overlay e highlight. Il Core non sa che esiste HTML.
 
 ## PythonBridge
-
+(<Immagine 2026-09-15 194536.jpg>)
 Python non vede l'overlay. Manda JSON. Il browser lo srotola in `sendData()`.
 
 ```js
