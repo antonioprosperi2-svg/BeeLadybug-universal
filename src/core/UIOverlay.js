@@ -99,8 +99,14 @@ const STYLES = `
   border: 1px solid rgba(110, 231, 255, 0.35);
   padding: 1px 5px;
 }
-.bl-mode {
+.bl-mode-wrap {
   margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  position: relative;
+}
+.bl-mode {
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -108,6 +114,50 @@ const STYLES = `
 }
 .bl-mode[data-mode="FREEZE"] { color: #ff3b4e; }
 .bl-mode[data-mode^="SLOW"] { color: #ffd36a; }
+.bl-info {
+  appearance: none;
+  position: relative;
+  flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+  padding: 0;
+  border: 1px solid rgba(139, 145, 163, 0.7);
+  border-radius: 50%;
+  background: transparent;
+  color: #8b91a3;
+  font: 700 9px ui-monospace, Consolas, monospace;
+  line-height: 1;
+  cursor: help;
+}
+.bl-info:hover,
+.bl-info:focus-visible {
+  color: #ffd36a;
+  border-color: #ffd36a;
+  outline: none;
+}
+.bl-info-tip {
+  display: none;
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  width: 228px;
+  padding: 8px 9px;
+  background: #0c0e14;
+  border: 1px solid rgba(255, 211, 106, 0.45);
+  color: #e9edf5;
+  font: 400 10px/1.45 ui-monospace, Consolas, monospace;
+  letter-spacing: 0;
+  text-transform: none;
+  z-index: 3;
+  pointer-events: none;
+  white-space: normal;
+  text-align: left;
+}
+.bl-info:hover .bl-info-tip,
+.bl-info:focus .bl-info-tip,
+.bl-info:focus-visible .bl-info-tip {
+  display: block;
+}
 .bl-stats {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -189,6 +239,31 @@ const STYLES = `
   border-color: #ff3b4e;
   color: #fff;
 }
+.bl-providers {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.bl-providers:empty {
+  display: none;
+}
+.bl-provider {
+  appearance: none;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  background: #16181f;
+  color: #fff6d8;
+  border: 1px solid rgba(255, 211, 106, 0.45);
+  font: 700 8px ui-monospace, Consolas, monospace;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+.bl-provider[data-hot="true"] {
+  background: #6ee7ff;
+  border-color: #6ee7ff;
+  color: #05060a;
+}
 .bl-hint {
   margin-left: auto;
   font-size: 9px;
@@ -213,6 +288,7 @@ export class UIOverlay {
         this.#stickBottom = true;
         this.#lastLogId = 0;
         this.#mounted = false;
+        this.#providerSig = '';
     }
 
     #host;
@@ -221,6 +297,7 @@ export class UIOverlay {
     #stickBottom;
     #lastLogId;
     #mounted;
+    #providerSig;
 
     /** @param {'auto' | HTMLElement} [target] */
     mount(target = 'auto') {
@@ -247,7 +324,13 @@ export class UIOverlay {
                   <span class="bl-mark" aria-hidden="true"></span>
                   <span class="bl-title">BEE LADYBUG</span>
                   <span class="bl-badge">CORE</span>
-                  <span class="bl-mode" data-el="mode">LIVE</span>
+                  <span class="bl-mode-wrap">
+                    <span class="bl-mode" data-el="mode">LIVE</span>
+                    <button class="bl-info" type="button" aria-describedby="bl-freeze-tip" aria-label="Freeze stops the simulated clock, not this overlay">
+                      <span aria-hidden="true">ⓘ</span>
+                      <span class="bl-info-tip" id="bl-freeze-tip">Freeze does not stop this overlay. It only stops the simulated clock. Adapters must listen for the sys event (op: freeze).</span>
+                    </button>
+                  </span>
                 </div>
                 <div class="bl-stats">
                   <div>HOST <b data-el="hostFps">—</b></div>
@@ -269,6 +352,7 @@ export class UIOverlay {
                   <button class="bl-btn" data-act="freeze" type="button">F4 STOP</button>
                   <button class="bl-btn" data-act="live" type="button">1x LIVE</button>
                   <button class="bl-btn" data-act="ask" type="button">ASK AI</button>
+                  <span class="bl-providers" data-el="providers"></span>
                   <span class="bl-hint">F2 overlay</span>
                 </div>
               </div>
@@ -286,7 +370,8 @@ export class UIOverlay {
             graphName: this.#root.querySelector('[data-el="graphName"]'),
             graphStats: this.#root.querySelector('[data-el="graphStats"]'),
             hud: this.#root.querySelector('[data-el="hud"]'),
-            console: this.#root.querySelector('[data-el="console"]')
+            console: this.#root.querySelector('[data-el="console"]'),
+            providers: this.#root.querySelector('[data-el="providers"]')
         };
 
         this.#root.querySelector('.bl-foot').addEventListener('click', (event) => {
@@ -297,6 +382,7 @@ export class UIOverlay {
             else if (act === 'freeze') this.core.toggleFreeze();
             else if (act === 'live') this.core.restoreRealtime();
             else if (act === 'ask') this.core.ask();
+            else if (act === 'assist') this.core.setActiveAssistant(btn.getAttribute('data-name'));
         });
 
         this.#els.console.addEventListener('scroll', () => {
@@ -318,6 +404,7 @@ export class UIOverlay {
         this.#root = null;
         this.#els = null;
         this.#mounted = false;
+        this.#providerSig = '';
         return this;
     }
 
@@ -366,6 +453,7 @@ export class UIOverlay {
         this.#paintGraph(primary);
         this.#renderHud(state.hud);
         this.#syncButtons(state);
+        this.#syncProviders(state);
 
         if (this.#stickBottom) {
             this.#els.console.scrollTop = this.#els.console.scrollHeight;
@@ -424,6 +512,23 @@ export class UIOverlay {
         }
     }
 
+    #syncProviders(state) {
+        const wrap = this.#els.providers;
+        if (!wrap) return;
+        const names = Array.isArray(state.assistants) ? state.assistants : [];
+        const active = state.assistant ?? '';
+        const sig = `${names.join('\0')}\0${active}`;
+        if (sig === this.#providerSig) return;
+        this.#providerSig = sig;
+        let html = '';
+        for (let i = 0; i < names.length; i++) {
+            const name = names[i];
+            const hot = name === active ? 'true' : 'false';
+            html += `<button class="bl-provider" data-act="assist" data-name="${escapeHtml(name)}" data-hot="${hot}" type="button" title="${escapeHtml(name)}">${escapeHtml(abbrevName(name))}</button>`;
+        }
+        wrap.innerHTML = html;
+    }
+
     #paintGraph(series) {
         const canvas = this.#els.graph;
         const ctx = canvas.getContext('2d');
@@ -473,6 +578,11 @@ export class UIOverlay {
 
         this.#els.graphStats.textContent = `min ${min.toFixed(1)}  max ${max.toFixed(1)}  avg ${series.avg.toFixed(1)}`;
     }
+}
+
+function abbrevName(name) {
+    const s = String(name || '?');
+    return s.slice(0, 2).toUpperCase();
 }
 
 function fmtHud(value) {

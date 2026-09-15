@@ -58,6 +58,7 @@ export interface CoreState {
     hud: Record<string, HudEntry>;
     mode: string;
     assistant: string | null;
+    assistants: string[];
 }
 
 export interface CoreOptions {
@@ -148,8 +149,11 @@ export class BeeLadybugCore {
     getLatest(type: string): BeePacket | null;
     readonly hasAssistant: boolean;
     readonly assistantBusy: boolean;
+    getAssistants(): string[];
+    registerAssistant(provider: AssistantProvider): this;
+    setActiveAssistant(name: string): this;
     setAssistant(provider: AssistantProvider): this;
-    clearAssistant(): this;
+    clearAssistant(name?: string): this;
     ask(question?: string): Promise<string | null>;
 }
 

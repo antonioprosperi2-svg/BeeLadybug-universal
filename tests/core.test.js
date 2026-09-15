@@ -113,3 +113,64 @@ test('freeze blocca il clock fittizio; sendData resta vivo', async () => {
 
     bee.destroy();
 });
+
+test('registerAssistant aggiunge senza rubare il focus; setActiveAssistant cambia ask', async () => {
+    const bee = makeCore();
+    const called = [];
+
+    bee.registerAssistant({
+        name: 'alpha',
+        complete() {
+            called.push('alpha');
+            return 'from-alpha';
+        }
+    });
+    bee.registerAssistant({
+        name: 'beta',
+        complete() {
+            called.push('beta');
+            return 'from-beta';
+        }
+    });
+
+    const state = bee.getState();
+    assert.equal(state.assistant, 'alpha');
+    assert.deepEqual(state.assistants, ['alpha', 'beta']);
+    assert.equal(bee.hasAssistant, true);
+    assert.deepEqual(bee.getAssistants(), ['alpha', 'beta']);
+
+    const first = await bee.ask('one');
+    assert.equal(first, 'from-alpha');
+
+    bee.setActiveAssistant('beta');
+    assert.equal(bee.getState().assistant, 'beta');
+    const second = await bee.ask('two');
+    assert.equal(second, 'from-beta');
+    assert.deepEqual(called, ['alpha', 'beta']);
+
+    bee.setActiveAssistant('missing');
+    assert.equal(bee.getState().assistant, 'beta');
+
+    bee.destroy();
+});
+
+test('setAssistant attiva senza cancellare gli altri provider', async () => {
+    const bee = makeCore();
+    bee.registerAssistant({ name: 'keep', complete: () => 'keep' });
+    bee.setAssistant({ name: 'now', complete: () => 'now' });
+
+    assert.deepEqual(bee.getAssistants(), ['keep', 'now']);
+    assert.equal(bee.getState().assistant, 'now');
+    const text = await bee.ask('?');
+    assert.equal(text, 'now');
+
+    bee.clearAssistant('now');
+    assert.deepEqual(bee.getAssistants(), ['keep']);
+    assert.equal(bee.getState().assistant, 'keep');
+
+    bee.clearAssistant();
+    assert.equal(bee.hasAssistant, false);
+    assert.deepEqual(bee.getAssistants(), []);
+
+    bee.destroy();
+});

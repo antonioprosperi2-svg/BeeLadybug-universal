@@ -12,13 +12,21 @@ window.bridge = bridge;
 
 bee.sendData('state', { key: 'adapter', value: 'python' });
 
-bee.setAssistant({
+bee.registerAssistant({
     name: 'mock',
     complete({ snapshot }) {
         const errors = snapshot.logs.filter((line) => line.level === 'error').length;
         const last = snapshot.history?.last;
         return Promise.resolve(
             `Mock AI: ${errors} error(i), metric ${snapshot.history?.name ?? 'n/a'} last=${last ?? 'n/a'}. Sostituisci complete() con il tuo modello.`
+        );
+    }
+});
+bee.registerAssistant({
+    name: 'echo',
+    complete({ question, snapshot }) {
+        return Promise.resolve(
+            `Echo: q="${question}" logs=${snapshot.logs.length} hud=${Object.keys(snapshot.hud).length}`
         );
     }
 });

@@ -9,7 +9,7 @@
 import { UIOverlay } from './UIOverlay.js';
 import { buildAssistantSnapshot, normalizeAssistant } from './AiAssistant.js';
 
-export const BEE_LADYBUG_VERSION = '0.2.0';
+export const BEE_LADYBUG_VERSION = '0.3.0';
 
 export const CORE_DEFAULTS = Object.freeze({
     toggleKey: 'F2',
@@ -93,7 +93,8 @@ export class BeeLadybugCore {
         this.#onKeyDown = (event) => this.#handleKey(event);
         this.#onTick = (now) => this.#tick(now);
         this.#started = false;
-        this.#assistant = null;
+        this.#assistants = new Map();
+        this.#activeAssistant = null;
         this.#askBusy = false;
 
         this.ui = null;
@@ -124,7 +125,10 @@ export class BeeLadybugCore {
     #onKeyDown;
     #onTick;
     #started;
-    #assistant;
+    /** @type {Map<string, { name: string, complete: Function }>} */
+    #assistants;
+    /** @type {string | null} */
+    #activeAssistant;
     #askBusy;
 
     /**
@@ -159,51 +163,86 @@ export class BeeLadybugCore {
     }
 
     get hasAssistant() {
-        return Boolean(this.#assistant);
+        return Boolean(this.#activeProvider());
     }
 
     get assistantBusy() {
         return this.#askBusy;
     }
 
+    /** Registered provider names, insertion order. */
+    getAssistants() {
+        return [...this.#assistants.keys()];
+    }
+
     /**
-     * Plug in any model. BeeLadybug does not call OpenAI/Ollama itself.
+     * Add a model without dropping the others. Same `name` updates that slot.
+     * The first registration becomes active; later ones do not steal focus.
      * @param {{ name?: string, complete: (input: { question: string, snapshot: object }) => unknown }} provider
      */
-    setAssistant(provider) {
-        const next = normalizeAssistant(provider);
-        if (!next) {
+    registerAssistant(provider) {
+        return this.#putAssistant(provider, { activate: !this.#activeAssistant, via: 'registerAssistant' });
+    }
+
+    /**
+     * @param {string} name
+     */
+    setActiveAssistant(name) {
+        const key = String(name || '');
+        if (!this.#assistants.has(key)) {
             this.sendData('warn', {
                 source: 'ai',
-                message: 'setAssistant() needs { complete(ctx) }. No vendor is bundled.'
+                message: `No assistant named "${key}". bee.registerAssistant({ name, complete }) first.`
             });
             return this;
         }
-        this.#assistant = next;
-        this.sendData('state', { source: 'ai', key: 'ai.assist', value: next.name });
-        this.sendData('log', {
+        this.#activeAssistant = key;
+        this.sendData('state', { source: 'ai', key: 'ai.assist', value: key });
+        this.sendData('log', { source: 'ai', message: `assistant active (${key})` });
+        return this;
+    }
+
+    /**
+     * Register and activate one provider. Does not remove the others.
+     * @param {{ name?: string, complete: (input: { question: string, snapshot: object }) => unknown }} provider
+     */
+    setAssistant(provider) {
+        return this.#putAssistant(provider, { activate: true, via: 'setAssistant' });
+    }
+
+    /**
+     * @param {string} [name] omit to drop every provider
+     */
+    clearAssistant(name) {
+        if (name == null || name === '') {
+            this.#assistants.clear();
+            this.#activeAssistant = null;
+        } else {
+            const key = String(name);
+            this.#assistants.delete(key);
+            if (this.#activeAssistant === key) {
+                this.#activeAssistant = this.#assistants.keys().next().value ?? null;
+            }
+        }
+        this.sendData('state', {
             source: 'ai',
-            message: `assistant ready (${next.name})`
+            key: 'ai.assist',
+            value: this.#activeAssistant ?? 'off'
         });
         return this;
     }
 
-    clearAssistant() {
-        this.#assistant = null;
-        this.sendData('state', { source: 'ai', key: 'ai.assist', value: 'off' });
-        return this;
-    }
-
     /**
-     * Send recent telemetry to the registered assistant and print the answer.
+     * Send recent telemetry to the active assistant and print the answer.
      * @param {string} [question]
      * @returns {Promise<string|null>}
      */
     async ask(question = 'Diagnose the current telemetry.') {
-        if (!this.#assistant) {
+        const assistant = this.#activeProvider();
+        if (!assistant) {
             this.sendData('warn', {
                 source: 'ai',
-                message: 'No assistant. bee.setAssistant({ name, complete }) then ASK AI.'
+                message: 'No assistant. bee.registerAssistant({ name, complete }) then ASK AI.'
             });
             return null;
         }
@@ -217,10 +256,10 @@ export class BeeLadybugCore {
         this.sendData('log', { source: 'ai', message: `ask: ${q}` });
         try {
             const snapshot = buildAssistantSnapshot(this, q);
-            const raw = await this.#assistant.complete({ question: q, snapshot });
+            const raw = await assistant.complete({ question: q, snapshot });
             const text = String(raw ?? '').trim() || '(empty answer)';
             this.sendData('log', { source: 'ai', message: text });
-            this.sendData('state', { source: 'ai', key: 'ai.assist', value: this.#assistant.name });
+            this.sendData('state', { source: 'ai', key: 'ai.assist', value: assistant.name });
             return text;
         } catch (err) {
             this.sendData('error', {
@@ -230,12 +269,43 @@ export class BeeLadybugCore {
             this.sendData('state', {
                 source: 'ai',
                 key: 'ai.assist',
-                value: this.#assistant?.name ?? 'error'
+                value: assistant?.name ?? 'error'
             });
             return null;
         } finally {
             this.#askBusy = false;
         }
+    }
+
+    #activeProvider() {
+        return this.#activeAssistant ? this.#assistants.get(this.#activeAssistant) ?? null : null;
+    }
+
+    /**
+     * @param {{ name?: string, complete: Function }} provider
+     * @param {{ activate: boolean, via: string }} opts
+     */
+    #putAssistant(provider, opts) {
+        const next = normalizeAssistant(provider);
+        if (!next) {
+            this.sendData('warn', {
+                source: 'ai',
+                message: `${opts.via}() needs { complete(ctx) }. No vendor is bundled.`
+            });
+            return this;
+        }
+        this.#assistants.set(next.name, next);
+        if (opts.activate) this.#activeAssistant = next.name;
+        this.sendData('state', {
+            source: 'ai',
+            key: 'ai.assist',
+            value: this.#activeAssistant ?? next.name
+        });
+        this.sendData('log', {
+            source: 'ai',
+            message: `assistant ready (${next.name})`
+        });
+        return this;
     }
 
 
@@ -280,7 +350,8 @@ export class BeeLadybugCore {
         this.#history.clear();
         this.#hud.clear();
         this.#latest.clear();
-        this.#assistant = null;
+        this.#assistants.clear();
+        this.#activeAssistant = null;
         this.#askBusy = false;
         this.ui?.destroy();
         this.ui = null;
@@ -307,6 +378,10 @@ export class BeeLadybugCore {
         return this.visible ? this.hide() : this.show();
     }
 
+    /**
+     * Stops the simulated clock only. Overlay RAF keeps running.
+     * Adapters must listen for `sys` packets with `op: 'freeze'`.
+     */
     freeze() {
         if (this.frozen) return this;
         this.frozen = true;
@@ -365,7 +440,8 @@ export class BeeLadybugCore {
             logCount: this.#logs.length,
             hud: this.getHud(),
             mode: this.#modeLabel(),
-            assistant: this.#assistant ? this.#assistant.name : null
+            assistant: this.#activeAssistant,
+            assistants: this.getAssistants()
         };
     }
 

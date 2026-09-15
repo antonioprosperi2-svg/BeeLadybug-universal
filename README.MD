@@ -216,14 +216,19 @@ npm run typecheck
 npm run lint
 ```
 
-Versione runtime e pacchetto: **0.2.0** (`BEE_LADYBUG_VERSION` e `package.json` devono restare uguali). Su npm ora risulta `0.1.0`: il prossimo `npm publish` sarà `0.2.0`.
+```bash
+npm login
+npm publish --access public
+```
+
+Versione runtime e pacchetto: **0.3.0** (`BEE_LADYBUG_VERSION` e `package.json` devono restare uguali).
 
 ## Assistente AI (gancio, nessun vendor)
 
-BeeLadybug **non** chiama OpenAI, Claude o Ollama. Lo sviluppatore innesta il proprio modello:
+BeeLadybug **non** chiama OpenAI, Claude o Ollama. Lo sviluppatore innesta i propri modelli. `registerAssistant` **aggiunge** (non sostituisce gli altri). `setActiveAssistant(name)` sceglie chi risponde a **ASK AI**.
 
 ```js
-bee.setAssistant({
+bee.registerAssistant({
   name: 'ollama',
   async complete({ question, snapshot }) {
     const res = await fetch('http://127.0.0.1:11434/api/generate', {
@@ -240,17 +245,18 @@ bee.setAssistant({
   }
 });
 
+bee.registerAssistant({
+  name: 'mock',
+  complete({ snapshot }) {
+    return `logs=${snapshot.logs.length}`;
+  }
+});
+
+bee.setActiveAssistant('ollama');
 await bee.ask('perché il loss sale?');
 ```
 
-Il Core manda un **snapshot** (log recenti, HUD, metriche) a `complete()`. Chiavi tipo `token`/`password` vengono redacted. In overlay: pulsante **ASK AI**. Senza `setAssistant`, il bottone spiega come collegarlo.
-
-## API Core
-
-```bash
-npm login
-npm publish --access public
-```
+Il Core manda un **snapshot** (log recenti, HUD, metriche) a `complete()`. Chiavi tipo `token`/`password` vengono redacted. In overlay: pulsante **ASK AI** e un quadratino per ogni provider; quello attivo è evidenziato. Senza provider, il bottone spiega come collegarlo. `setAssistant` resta come scorciatoia: registra e attiva, senza cancellare gli altri.
 
 ## API Core
 
@@ -277,15 +283,16 @@ bee.getHud();
 bee.show(); bee.hide(); bee.toggle();
 bee.freeze(); bee.unfreeze(); bee.toggleFreeze();
 bee.applySlowMo(); bee.restoreRealtime();
-bee.setAssistant({ name: 'mock', complete: async ({ snapshot }) => 'ok' });
+bee.registerAssistant({ name: 'mock', complete: async ({ snapshot }) => 'ok' });
+bee.setActiveAssistant('mock');
 await bee.ask('why fps drop?');
 bee.destroy();
 ```
 
 ## Roadmap
 
-1. **Ora** — Core, adapter, PythonBridge, tipi, ESLint, gancio AI. Fatto.
-2. **npm 0.2.0** — `npm publish` (registry è ancora 0.1.0).
+1. **Ora** — Core, adapter, PythonBridge, tipi, ESLint, gancio AI multi-provider. Fatto.
+2. **npm 0.3.0** — `npm publish`.
 
 ## Come contribuire
 

@@ -19,6 +19,19 @@ const adapter = new CanvasAdapter(bee, { canvas, entities });
 adapter.attach();
 window.adapter = adapter;
 
+bee.registerAssistant({
+    name: 'mock',
+    complete({ snapshot }) {
+        return Promise.resolve(`Mock: fps last=${snapshot.history?.last ?? 'n/a'}`);
+    }
+});
+bee.registerAssistant({
+    name: 'echo',
+    complete({ question }) {
+        return Promise.resolve(`Echo: ${question}`);
+    }
+});
+
 const pointer = { x: player.x, y: player.y, over: false };
 canvas.addEventListener('mousemove', (event) => {
     const rect = canvas.getBoundingClientRect();
