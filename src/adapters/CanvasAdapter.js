@@ -15,11 +15,17 @@
  * adapter.attach();
  * // after updating entity positions each host frame:
  * adapter.pump();
+ *
+ * @example
+ * // third-party / bookmarklet: no access to the host loop
+ * const remote = new CanvasAdapter(core, { canvas, entities, autoPump: true });
+ * remote.attach();
  */
 
 export const CANVAS_ADAPTER_DEFAULTS = Object.freeze({
     overlay: true,
     computeCollisions: true,
+    autoPump: false,
     colorActive: '#3dff6a',
     colorColliding: '#ff3b3b',
     colorInactive: '#8a8a8a',
@@ -41,6 +47,7 @@ export class CanvasAdapter {
         this.entities = options.entities ?? [];
         this.overlayEnabled = cfg.overlay;
         this.computeCollisions = cfg.computeCollisions;
+        this.autoPump = Boolean(cfg.autoPump);
         this.colorActive = cfg.colorActive;
         this.colorColliding = cfg.colorColliding;
         this.colorInactive = cfg.colorInactive;
@@ -54,19 +61,35 @@ export class CanvasAdapter {
         this.#attached = false;
         this.#overlay = null;
         this.#unsubscribe = null;
+        this.#rafId = 0;
+        this.#pumpFromAuto = false;
+        this.#manualPumpWarned = false;
         this.#lastPump = 0;
         this.#fps = 0;
         this.#wasColliding = new Set();
         this.#onResize = () => this.#syncOverlay();
+        this.#onTick = () => {
+            this.#rafId = requestAnimationFrame(this.#onTick);
+            this.#pumpFromAuto = true;
+            try {
+                this.pump();
+            } finally {
+                this.#pumpFromAuto = false;
+            }
+        };
     }
 
     #attached;
     #overlay;
     #unsubscribe;
+    #rafId;
+    #pumpFromAuto;
+    #manualPumpWarned;
     #lastPump;
     #fps;
     #wasColliding;
     #onResize;
+    #onTick;
 
     attach() {
         if (this.#attached) return this;
@@ -83,6 +106,7 @@ export class CanvasAdapter {
             window.addEventListener('resize', this.#onResize);
             window.addEventListener('scroll', this.#onResize, true);
         }
+        if (this.autoPump) this.startAutoPump();
 
         this.core?.sendData('log', {
             source: this.source,
@@ -99,6 +123,7 @@ export class CanvasAdapter {
     detach() {
         if (!this.#attached) return this;
         this.#attached = false;
+        this.#stopAutoPumpLoop();
         if (this.#unsubscribe) this.#unsubscribe();
         this.#unsubscribe = null;
         this.#unmountOverlay();
@@ -106,6 +131,20 @@ export class CanvasAdapter {
             window.removeEventListener('resize', this.#onResize);
             window.removeEventListener('scroll', this.#onResize, true);
         }
+        return this;
+    }
+
+    /**
+     * Drive `pump()` from an internal `requestAnimationFrame` loop.
+     * Use this when the host game loop cannot call `pump()` (bookmarklet / console).
+     */
+    startAutoPump() {
+        this.autoPump = true;
+        if (!this.#attached) return this;
+        if (this.#rafId) return this;
+        if (typeof requestAnimationFrame !== 'function') return this;
+        this.#manualPumpWarned = false;
+        this.#rafId = requestAnimationFrame(this.#onTick);
         return this;
     }
 
@@ -126,10 +165,15 @@ export class CanvasAdapter {
      * Call once per host frame, after entity positions are updated.
      * Pass a 2D context only if overlay is disabled and you want hitboxes
      * drawn onto the game canvas itself.
+     * Ignored (with a warning) while `autoPump` owns the frame loop.
      * @param {CanvasRenderingContext2D} [ctx]
      */
     pump(ctx) {
         if (!this.#attached || !this.core) return this;
+        if (this.#rafId && !this.#pumpFromAuto) {
+            this.#warnManualPump();
+            return this;
+        }
 
         const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
         if (this.#lastPump) {
@@ -145,6 +189,25 @@ export class CanvasAdapter {
         this.#emitCollisionEdges(boxes);
         this.#drawHitboxes(boxes, ctx);
         return this;
+    }
+
+    #stopAutoPumpLoop() {
+        if (this.#rafId && typeof cancelAnimationFrame === 'function') {
+            cancelAnimationFrame(this.#rafId);
+        }
+        this.#rafId = 0;
+        this.#pumpFromAuto = false;
+        this.#manualPumpWarned = false;
+    }
+
+    #warnManualPump() {
+        if (this.#manualPumpWarned) return;
+        this.#manualPumpWarned = true;
+        const message = 'pump() skipped: autoPump already drives the frame loop.';
+        if (typeof console !== 'undefined' && typeof console.warn === 'function') {
+            console.warn(`[BeeLadybug] CanvasAdapter ${message}`);
+        }
+        this.core.sendData('warn', { source: this.source, message });
     }
 
     #onCore(packet) {

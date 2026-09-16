@@ -193,6 +193,7 @@ export interface CanvasAdapterOptions {
     entities?: CanvasEntity[];
     overlay?: boolean;
     computeCollisions?: boolean;
+    autoPump?: boolean;
     colorActive?: string;
     colorColliding?: string;
     colorInactive?: string;
@@ -209,11 +210,13 @@ export class CanvasAdapter {
     entities: CanvasEntity[];
     overlayEnabled: boolean;
     computeCollisions: boolean;
+    autoPump: boolean;
     frozen: boolean;
     timeScale: number;
     constructor(core: BeeLadybugCore, options?: CanvasAdapterOptions);
     attach(): this;
     detach(): this;
+    startAutoPump(): this;
     setCanvas(canvas: HTMLCanvasElement | null): this;
     setEntities(entities: CanvasEntity[]): this;
     pump(ctx?: CanvasRenderingContext2D): this;
