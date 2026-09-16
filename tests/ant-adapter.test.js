@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { afterEach, test } from 'node:test';
 import { AntAdapter, ANT_ADAPTER_DEFAULTS, BeeLadybugCore } from '../src/index.js';
+
+const NativeMutationObserver = globalThis.MutationObserver;
 
 function makeCore() {
     return new BeeLadybugCore({
@@ -11,27 +13,31 @@ function makeCore() {
     });
 }
 
+function restoreMutationObserver() {
+    if (NativeMutationObserver) globalThis.MutationObserver = NativeMutationObserver;
+    else delete globalThis.MutationObserver;
+}
+
 function installFakeMutationObserver() {
     const observers = [];
-    globalThis.MutationObserver = class {
-        constructor(cb) {
-            this.cb = cb;
-            this.target = null;
-            this.options = null;
-            this.disconnected = false;
-            observers.push(this);
-        }
-        observe(target, options) {
-            this.target = target;
-            this.options = options;
-        }
-        disconnect() {
-            this.disconnected = true;
-        }
-        emit(records) {
-            this.cb(records);
-        }
+    function FakeMutationObserver(cb) {
+        this.cb = cb;
+        this.target = null;
+        this.options = null;
+        this.disconnected = false;
+        observers.push(this);
+    }
+    FakeMutationObserver.prototype.observe = function observe(target, options) {
+        this.target = target;
+        this.options = options;
     };
+    FakeMutationObserver.prototype.disconnect = function disconnect() {
+        this.disconnected = true;
+    };
+    FakeMutationObserver.prototype.emit = function emit(records) {
+        this.cb(records);
+    };
+    globalThis.MutationObserver = FakeMutationObserver;
     return observers;
 }
 
@@ -49,6 +55,21 @@ function fakeNode(partial = {}) {
         ...partial
     };
 }
+
+afterEach(() => {
+    restoreMutationObserver();
+});
+
+test('AntAdapter attach senza MutationObserver non lancia', () => {
+    delete globalThis.MutationObserver;
+    const bee = makeCore();
+    const ant = new AntAdapter(bee, { root: fakeNode({ id: 'stage' }) });
+    ant.attach();
+    assert.equal(bee.getAdapters()[0].name, 'ant');
+    ant.detach();
+    assert.equal(bee.getAdapters().length, 0);
+    bee.destroy();
+});
 
 test('AntAdapter soglia e selettore, poi si spegne su detach', () => {
     const observers = installFakeMutationObserver();

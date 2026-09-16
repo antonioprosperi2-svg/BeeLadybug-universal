@@ -72,12 +72,17 @@ export class AntAdapter {
         if (typeof MutationObserver === 'undefined' || !this.root) return;
         this.#counts = new WeakMap();
         this.#observer = new MutationObserver(this.#onMutate);
-        this.#observer.observe(this.root, {
-            childList: true,
-            subtree: true,
-            attributes: true,
-            characterData: true
-        });
+        try {
+            this.#observer.observe(this.root, {
+                childList: true,
+                subtree: true,
+                attributes: true,
+                characterData: true
+            });
+        } catch {
+            this.#observer.disconnect();
+            this.#observer = null;
+        }
     }
 
     #disable() {

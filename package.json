@@ -19,7 +19,7 @@
     "scripts": {
         "typecheck": "tsc --noEmit",
         "lint": "eslint src examples",
-        "test": "node --test tests/**/*.test.js"
+        "test": "node --test tests/*.test.js"
     },
   "keywords": [
     "debug",
@@ -45,7 +45,7 @@
   },
   "homepage": "https://github.com/antonioprosperi2-svg/BeeLadybug-universal#readme",
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   },
     "devDependencies": {
         "@eslint/js": "^9.36.0",

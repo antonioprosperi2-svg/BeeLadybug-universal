@@ -151,5 +151,10 @@ function positive(value, fallback) {
 function supportedEntryTypes() {
     if (typeof PerformanceObserver !== 'function') return [];
     const list = PerformanceObserver.supportedEntryTypes;
-    return list ? [...list] : [];
+    if (!list) return [];
+    try {
+        return Array.from(list);
+    } catch {
+        return [];
+    }
 }
