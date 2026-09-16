@@ -247,6 +247,41 @@ const STYLES = `
 .bl-providers:empty {
   display: none;
 }
+.bl-adapters {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.bl-adapters:empty {
+  display: none;
+}
+.bl-adapter {
+  appearance: none;
+  background: #16181f;
+  color: #8b91a3;
+  border: 1px solid rgba(139, 145, 163, 0.45);
+  font: 700 9px ui-monospace, Consolas, monospace;
+  letter-spacing: 0.06em;
+  padding: 5px 7px;
+  cursor: pointer;
+}
+.bl-adapter[data-hot="true"] {
+  color: #fff6d8;
+  border-color: #ffd36a;
+}
+.bl-adapter[data-flash="true"] {
+  animation: bl-adapter-flash 0.55s ease;
+}
+@keyframes bl-adapter-flash {
+  0% {
+    background: #ffd36a;
+    color: #05060a;
+    border-color: #ffd36a;
+  }
+  100% {
+    background: #16181f;
+  }
+}
 .bl-provider {
   appearance: none;
   width: 22px;
@@ -271,6 +306,12 @@ const STYLES = `
 }
 @media (prefers-reduced-motion: reduce) {
   .bl-scan { display: none; }
+  .bl-adapter[data-flash="true"] {
+    animation: none;
+    background: #ffd36a;
+    color: #05060a;
+    border-color: #ffd36a;
+  }
 }
 `;
 
@@ -289,6 +330,9 @@ export class UIOverlay {
         this.#lastLogId = 0;
         this.#mounted = false;
         this.#providerSig = '';
+        this.#adapterSig = '';
+        this.#flashAt = new Map();
+        this.#flashTimers = new Map();
     }
 
     #host;
@@ -298,6 +342,9 @@ export class UIOverlay {
     #lastLogId;
     #mounted;
     #providerSig;
+    #adapterSig;
+    #flashAt;
+    #flashTimers;
 
     /** @param {'auto' | HTMLElement} [target] */
     mount(target = 'auto') {
@@ -353,6 +400,7 @@ export class UIOverlay {
                   <button class="bl-btn" data-act="live" type="button">1x LIVE</button>
                   <button class="bl-btn" data-act="ask" type="button">ASK AI</button>
                   <span class="bl-providers" data-el="providers"></span>
+                  <span class="bl-adapters" data-el="adapters"></span>
                   <span class="bl-hint">F2 overlay</span>
                 </div>
               </div>
@@ -371,7 +419,8 @@ export class UIOverlay {
             graphStats: this.#root.querySelector('[data-el="graphStats"]'),
             hud: this.#root.querySelector('[data-el="hud"]'),
             console: this.#root.querySelector('[data-el="console"]'),
-            providers: this.#root.querySelector('[data-el="providers"]')
+            providers: this.#root.querySelector('[data-el="providers"]'),
+            adapters: this.#root.querySelector('[data-el="adapters"]')
         };
 
         this.#root.querySelector('.bl-foot').addEventListener('click', (event) => {
@@ -383,6 +432,7 @@ export class UIOverlay {
             else if (act === 'live') this.core.restoreRealtime();
             else if (act === 'ask') this.core.ask();
             else if (act === 'assist') this.core.setActiveAssistant(btn.getAttribute('data-name'));
+            else if (act === 'adapter') this.core.toggleAdapter(btn.getAttribute('data-name'));
         });
 
         this.#els.console.addEventListener('scroll', () => {
@@ -405,6 +455,9 @@ export class UIOverlay {
         this.#els = null;
         this.#mounted = false;
         this.#providerSig = '';
+        this.#adapterSig = '';
+        this.#clearFlashTimers();
+        this.#flashAt.clear();
         return this;
     }
 
@@ -423,6 +476,7 @@ export class UIOverlay {
     onPacket(packet) {
         if (!this.#els || !packet) return;
         if (packet.type === 'sys') return;
+        this.#flashAdapterButton(packet);
         if (packet.level || packet.type === 'log' || packet.type === 'warn' || packet.type === 'error') {
             this.#appendLine(packet);
         }
@@ -454,6 +508,7 @@ export class UIOverlay {
         this.#renderHud(state.hud);
         this.#syncButtons(state);
         this.#syncProviders(state);
+        this.#syncAdapters(state);
 
         if (this.#stickBottom) {
             this.#els.console.scrollTop = this.#els.console.scrollHeight;
@@ -527,6 +582,63 @@ export class UIOverlay {
             html += `<button class="bl-provider" data-act="assist" data-name="${escapeHtml(name)}" data-hot="${hot}" type="button" title="${escapeHtml(name)}">${escapeHtml(abbrevName(name))}</button>`;
         }
         wrap.innerHTML = html;
+    }
+
+    #syncAdapters(state) {
+        const wrap = this.#els.adapters;
+        if (!wrap) return;
+        const list = Array.isArray(state.adapters) ? state.adapters : [];
+        const sig = list.map((entry) => `${entry.name}\0${entry.label}\0${entry.enabled ? 1 : 0}`).join('\n');
+        if (sig === this.#adapterSig) return;
+        this.#adapterSig = sig;
+        let html = '';
+        for (let i = 0; i < list.length; i++) {
+            const entry = list[i];
+            const hot = entry.enabled ? 'true' : 'false';
+            html += `<button class="bl-adapter" data-act="adapter" data-name="${escapeHtml(entry.name)}" data-hot="${hot}" type="button" title="${escapeHtml(entry.label)}">${escapeHtml(entry.label)}</button>`;
+        }
+        wrap.innerHTML = html;
+    }
+
+    #flashAdapterButton(packet) {
+        if (packet.type !== 'warn' && packet.type !== 'telemetry') return;
+        const wrap = this.#els.adapters;
+        if (!wrap || !this.core || typeof this.core.getAdapters !== 'function') return;
+        const name = packet.source;
+        if (!this.core.getAdapters().some((entry) => entry.name === name)) return;
+
+        const escaped = typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
+            ? CSS.escape(name)
+            : name.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+        const btn = wrap.querySelector(`[data-name="${escaped}"]`);
+        if (!btn) return;
+
+        const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+        const last = this.#flashAt.get(name) ?? 0;
+        if (now - last < 1500) return;
+        this.#flashAt.set(name, now);
+
+        btn.dataset.flash = 'false';
+        void btn.offsetWidth;
+        btn.dataset.flash = 'true';
+
+        const prev = this.#flashTimers.get(name);
+        if (prev && typeof clearTimeout === 'function') clearTimeout(prev);
+        if (typeof setTimeout !== 'function') return;
+        const timer = setTimeout(() => {
+            this.#flashTimers.delete(name);
+            if (btn.dataset.flash === 'true') btn.dataset.flash = 'false';
+        }, 560);
+        this.#flashTimers.set(name, timer);
+    }
+
+    #clearFlashTimers() {
+        if (typeof clearTimeout !== 'function') {
+            this.#flashTimers.clear();
+            return;
+        }
+        for (const timer of this.#flashTimers.values()) clearTimeout(timer);
+        this.#flashTimers.clear();
     }
 
     #paintGraph(series) {

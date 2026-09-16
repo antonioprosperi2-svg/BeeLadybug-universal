@@ -2,7 +2,7 @@
  * DOM sandbox — Core + WebDOMAdapter over a tiny fake page.
  * The page never talks to the overlay. The adapter watches hover, box model, mutations.
  */
-import { BeeLadybugCore, WebDOMAdapter } from '../src/index.js';
+import { BeeLadybugCore, WebDOMAdapter, AntAdapter, SpiderAdapter } from '../src/index.js';
 
 const bee = new BeeLadybugCore();
 window.bee = bee;
@@ -14,6 +14,14 @@ const adapter = new WebDOMAdapter(bee, {
 });
 adapter.attach();
 window.adapter = adapter;
+
+const ant = new AntAdapter(bee, { root: stage, threshold: 30 });
+ant.attach();
+window.ant = ant;
+
+const spider = new SpiderAdapter(bee);
+spider.attach();
+window.spider = spider;
 
 const list = document.getElementById('cards');
 const addBtn = document.getElementById('add-card');
@@ -32,4 +40,9 @@ addBtn?.addEventListener('click', () => {
 bumpBtn?.addEventListener('click', () => {
     const wide = cta.classList.toggle('wide');
     cta.textContent = wide ? 'CTA allargata' : 'Call to action';
+});
+
+const burstBtn = document.getElementById('burst-mutate');
+burstBtn?.addEventListener('click', () => {
+    for (let i = 0; i < 40; i++) cta.dataset.n = String(i);
 });

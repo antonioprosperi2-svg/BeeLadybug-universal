@@ -37,6 +37,8 @@ bee-ladybug/
 │   └── adapters/
 │       ├── CanvasAdapter.js
 │       ├── WebDOMAdapter.js
+│       ├── AntAdapter.js
+│       ├── SpiderAdapter.js
 │       └── python/PythonBridge.js
 ├── examples/
 │   ├── core.html
@@ -96,6 +98,7 @@ Gli adapter parlano **solo** così. Uno scalare viene avvolto in `{ value }`.
 | `log` | `{ message, level?, source? }` | console |
 | `warn` | `{ message, source? }` | console ambra |
 | `error` | `{ message, source? }` | console rossa |
+| `telemetry` | `{ kind?, duration?, source? }` | history + lampeggio pulsante adapter |
 | `clear` | `{ channel?: 'logs'\|'history'\|'hud' }` | reset buffer |
 | `sys` | emesso dal Core | freeze / visibilità / scala |
 
@@ -172,6 +175,50 @@ adapter.attach();
 
 Traduce il DOM in pacchetti: nodo sotto il puntatore, box model (margin / padding / content), conteggio nodi, mutazioni (`+n -n attr`). `F4` congela l'hover. `F2` nasconde overlay e highlight. Il Core non sa che esiste HTML.
 
+## Registro adapter (overlay)
+
+Il Core non conosce ANT/SPIDER. Gli adapter si iscrivono con hook propri; l'overlay disegna un toggle per ciascuno.
+
+```js
+bee.registerAdapter('probe', {
+  label: 'PROBE',
+  enable: () => observer.observe(root, opts),
+  disable: () => observer.disconnect()
+});
+adapter.detach(); // chiama bee.unregisterAdapter('probe')
+```
+
+Click sul pulsante → `enable()` / `disable()`. Un pacchetto `warn` o `telemetry` con `source` uguale al nome registrato fa lampeggiare quel pulsante, al massimo una volta ogni 1.5s.
+
+## AntAdapter
+
+```js
+import { BeeLadybugCore, AntAdapter } from './src/index.js';
+
+const bee = new BeeLadybugCore();
+const ant = new AntAdapter(bee, {
+  root: document.body,
+  threshold: 30          // mutazioni / secondo per nodo
+});
+ant.attach();
+```
+
+`MutationObserver` indipendente da `WebDOMAdapter` (possono condividere lo stesso `root`). Se un nodo supera la soglia, arriva un `warn` `source: 'ant'`.
+
+## SpiderAdapter
+
+```js
+import { BeeLadybugCore, SpiderAdapter } from './src/index.js';
+
+const bee = new BeeLadybugCore();
+const spider = new SpiderAdapter(bee, {
+  resourceThreshold: 500 // ms
+});
+spider.attach();
+```
+
+`PerformanceObserver`: `longtask` > 50ms → `telemetry`; risorse > soglia → `warn`. Se il browser non espone `longtask` (Firefox/Safari), un log una tantum e quella parte si spegne senza errori.
+
 ## PythonBridge
 
 Python non vede l'overlay. Manda JSON. Il browser lo srotola in `sendData()`.
@@ -228,7 +275,7 @@ npm login
 npm publish --access public
 ```
 
-Versione runtime e pacchetto: **0.3.0** (`BEE_LADYBUG_VERSION` e `package.json` devono restare uguali).
+Versione runtime e pacchetto: **0.4.0** (`BEE_LADYBUG_VERSION` e `package.json` devono restare uguali).
 
 ## Assistente AI (gancio, nessun vendor)
 
@@ -293,13 +340,15 @@ bee.applySlowMo(); bee.restoreRealtime();
 bee.registerAssistant({ name: 'mock', complete: async ({ snapshot }) => 'ok' });
 bee.setActiveAssistant('mock');
 await bee.ask('why fps drop?');
+bee.registerAdapter('probe', { label: 'PROBE', enable() {}, disable() {} });
+bee.toggleAdapter('probe');
 bee.destroy();
 ```
 
 ## Roadmap
 
-1. **Ora** — Core, adapter, PythonBridge, tipi, ESLint, gancio AI multi-provider. Fatto.
-2. **npm 0.3.0** — `npm publish`.
+1. **Ora** — Core, adapter, registro toggle overlay, Ant/Spider, PythonBridge, tipi, ESLint, gancio AI multi-provider. Fatto.
+2. **npm 0.4.0** — `npm publish`.
 
 ## Come contribuire
 

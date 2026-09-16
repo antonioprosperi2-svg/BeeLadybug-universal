@@ -9,7 +9,7 @@
 import { UIOverlay } from './UIOverlay.js';
 import { buildAssistantSnapshot, normalizeAssistant } from './AiAssistant.js';
 
-export const BEE_LADYBUG_VERSION = '0.3.0';
+export const BEE_LADYBUG_VERSION = '0.4.0';
 
 export const CORE_DEFAULTS = Object.freeze({
     toggleKey: 'F2',
@@ -35,7 +35,8 @@ export const WELL_KNOWN_TYPES = Object.freeze([
     'error',
     'state',
     'sys',
-    'clear'
+    'clear',
+    'telemetry'
 ]);
 
 /**
@@ -96,6 +97,7 @@ export class BeeLadybugCore {
         this.#assistants = new Map();
         this.#activeAssistant = null;
         this.#askBusy = false;
+        this.#adapters = new Map();
 
         this.ui = null;
         if (cfg.ui !== false && typeof document !== 'undefined') {
@@ -130,6 +132,8 @@ export class BeeLadybugCore {
     /** @type {string | null} */
     #activeAssistant;
     #askBusy;
+    /** @type {Map<string, { name: string, label: string, enabled: boolean, enable: Function, disable: Function }>} */
+    #adapters;
 
     /**
      * Public adapter contract. `type` is a channel name; `payload` is raw data.
@@ -282,6 +286,86 @@ export class BeeLadybugCore {
     }
 
     /**
+     * Register a toggleable diagnostic adapter. The core stores hooks only —
+     * it does not import or special-case adapter modules.
+     * @param {string} name
+     * @param {{ enable: () => void, disable: () => void, label?: string }} hooks
+     */
+    registerAdapter(name, hooks = {}) {
+        const key = String(name || '').trim();
+        if (!key || typeof hooks.enable !== 'function' || typeof hooks.disable !== 'function') {
+            this.sendData('warn', {
+                source: 'core',
+                message: 'registerAdapter() needs a name and { enable, disable }.'
+            });
+            return this;
+        }
+        const label = String(hooks.label || key).trim() || key;
+        this.#adapters.set(key, {
+            name: key,
+            label,
+            enabled: true,
+            enable: hooks.enable,
+            disable: hooks.disable
+        });
+        this.sendData('sys', { op: 'adapter', name: key, registered: true, label, enabled: true });
+        return this;
+    }
+
+    /**
+     * @param {string} name
+     */
+    unregisterAdapter(name) {
+        const key = String(name || '').trim();
+        if (!key || !this.#adapters.has(key)) return this;
+        this.#adapters.delete(key);
+        this.sendData('sys', { op: 'adapter', name: key, registered: false });
+        return this;
+    }
+
+    /** Registered diagnostic adapters, insertion order. */
+    getAdapters() {
+        return [...this.#adapters.values()].map((entry) => ({
+            name: entry.name,
+            label: entry.label,
+            enabled: entry.enabled
+        }));
+    }
+
+    /**
+     * @param {string} name
+     */
+    toggleAdapter(name) {
+        const entry = this.#adapters.get(String(name || '').trim());
+        if (!entry) return this;
+        return this.setAdapterEnabled(entry.name, !entry.enabled);
+    }
+
+    /**
+     * @param {string} name
+     * @param {boolean} enabled
+     */
+    setAdapterEnabled(name, enabled) {
+        const entry = this.#adapters.get(String(name || '').trim());
+        if (!entry) return this;
+        const next = Boolean(enabled);
+        if (entry.enabled === next) return this;
+        try {
+            if (next) entry.enable();
+            else entry.disable();
+            entry.enabled = next;
+        } catch (err) {
+            console.warn('[BeeLadybug] adapter toggle error', err);
+        }
+        this.sendData('sys', {
+            op: 'adapter',
+            name: entry.name,
+            enabled: entry.enabled
+        });
+        return this;
+    }
+
+    /**
      * @param {{ name?: string, complete: Function }} provider
      * @param {{ activate: boolean, via: string }} opts
      */
@@ -353,6 +437,7 @@ export class BeeLadybugCore {
         this.#assistants.clear();
         this.#activeAssistant = null;
         this.#askBusy = false;
+        this.#adapters.clear();
         this.ui?.destroy();
         this.ui = null;
         return this;
@@ -441,7 +526,8 @@ export class BeeLadybugCore {
             hud: this.getHud(),
             mode: this.#modeLabel(),
             assistant: this.#activeAssistant,
-            assistants: this.getAssistants()
+            assistants: this.getAssistants(),
+            adapters: this.getAdapters()
         };
     }
 
@@ -550,6 +636,13 @@ export class BeeLadybugCore {
         if (type === 'state') {
             const key = String(payload.key ?? payload.name ?? 'state');
             this.#hud.set(key, { value: payload.value, unit: payload.unit, type });
+            return;
+        }
+
+        if (type === 'telemetry') {
+            const name = String(payload.kind ?? payload.name ?? 'telemetry');
+            const value = numeric(payload.duration ?? payload.value);
+            if (value != null) this.#pushHistory(name, value);
             return;
         }
 

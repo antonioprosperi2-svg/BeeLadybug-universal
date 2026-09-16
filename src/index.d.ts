@@ -14,7 +14,8 @@ export const WELL_KNOWN_TYPES: readonly [
     'error',
     'state',
     'sys',
-    'clear'
+    'clear',
+    'telemetry'
 ];
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
@@ -59,6 +60,7 @@ export interface CoreState {
     mode: string;
     assistant: string | null;
     assistants: string[];
+    adapters: AdapterInfo[];
 }
 
 export interface CoreOptions {
@@ -104,6 +106,18 @@ export interface AssistantSnapshot {
 export interface AssistantProvider {
     name?: string;
     complete(input: { question: string; snapshot: AssistantSnapshot }): unknown;
+}
+
+export interface AdapterHooks {
+    enable(): void;
+    disable(): void;
+    label?: string;
+}
+
+export interface AdapterInfo {
+    name: string;
+    label: string;
+    enabled: boolean;
 }
 
 export function formatSimTime(ms: number): string;
@@ -155,6 +169,11 @@ export class BeeLadybugCore {
     setAssistant(provider: AssistantProvider): this;
     clearAssistant(name?: string): this;
     ask(question?: string): Promise<string | null>;
+    registerAdapter(name: string, hooks: AdapterHooks): this;
+    unregisterAdapter(name: string): this;
+    getAdapters(): AdapterInfo[];
+    toggleAdapter(name: string): this;
+    setAdapterEnabled(name: string, enabled: boolean): this;
 }
 
 export class UIOverlay {
@@ -251,6 +270,44 @@ export class WebDOMAdapter {
     detach(): this;
     setRoot(root: ParentNode | null): this;
     pump(): this;
+}
+
+export interface AntAdapterOptions {
+    root?: ParentNode | null;
+    threshold?: number;
+    windowMs?: number;
+    source?: string;
+}
+
+export const ANT_ADAPTER_DEFAULTS: Required<Omit<AntAdapterOptions, 'root'>>;
+
+export class AntAdapter {
+    core: BeeLadybugCore | null;
+    root: ParentNode | null;
+    threshold: number;
+    windowMs: number;
+    source: string;
+    constructor(core: BeeLadybugCore, options?: AntAdapterOptions);
+    attach(): this;
+    detach(): this;
+}
+
+export interface SpiderAdapterOptions {
+    longTaskThreshold?: number;
+    resourceThreshold?: number;
+    source?: string;
+}
+
+export const SPIDER_ADAPTER_DEFAULTS: Required<SpiderAdapterOptions>;
+
+export class SpiderAdapter {
+    core: BeeLadybugCore | null;
+    longTaskThreshold: number;
+    resourceThreshold: number;
+    source: string;
+    constructor(core: BeeLadybugCore, options?: SpiderAdapterOptions);
+    attach(): this;
+    detach(): this;
 }
 
 export type PythonBridgeStatus = 'idle' | 'connecting' | 'open' | 'closed';
