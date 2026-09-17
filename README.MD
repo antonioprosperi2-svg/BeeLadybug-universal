@@ -1,7 +1,9 @@
 
 # BeeLadybug
-https://beeenginejs.com/wp-content/uploads/2026/09/Gemini_Generated_Image_pz6kdwpz6kdwpz6k.jpg
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/antonioprosperi2-svg/BeeLadybug-universal/main/docs/logo.jpg" alt="BeeLadybug" width="720">
+</p>
 
 Universal telemetry and visual inspection overlay.
 
@@ -119,7 +121,7 @@ bee.subscribe((packet) => {
 });
 ```
 
-![Overlay Core: la ⓘ accanto a LIVE spiega che il freeze ferma solo il clock fittizio](docs/overlay-core.jpg)
+![Overlay Core: la ⓘ accanto a LIVE spiega che il freeze ferma solo il clock fittizio](https://raw.githubusercontent.com/antonioprosperi2-svg/BeeLadybug-universal/main/docs/overlay-core.jpg)
 
 ## Tasti
 
@@ -249,7 +251,7 @@ python examples/python/sender.py
 
 Poi aprire `http://localhost:8080/examples/python.html` e Connect. I pulsanti mock funzionano anche a processo spento.
 
-![Overlay PythonBridge: ASK AI e quadratini mock/echo per scegliere il provider](docs/overlay-python.jpg)
+![Overlay PythonBridge: ASK AI e quadratini mock/echo per scegliere il provider](https://raw.githubusercontent.com/antonioprosperi2-svg/BeeLadybug-universal/main/docs/overlay-python.jpg)
 
 ## npm / TypeScript
 
@@ -275,7 +277,7 @@ npm login
 npm publish --access public
 ```
 
-Versione runtime e pacchetto: **0.4.0** (`BEE_LADYBUG_VERSION` e `package.json` devono restare uguali).
+Versione runtime e pacchetto: **0.4.1** (`BEE_LADYBUG_VERSION` e `package.json` devono restare uguali).
 
 ## Assistente AI (gancio, nessun vendor)
 
@@ -348,7 +350,7 @@ bee.destroy();
 ## Roadmap
 
 1. **Ora** — Core, adapter, registro toggle overlay, Ant/Spider, PythonBridge, tipi, ESLint, gancio AI multi-provider. Fatto.
-2. **npm 0.4.0** — `npm publish`.
+2. **npm 0.4.1** — `npm publish`.
 
 ## Come contribuire
 
