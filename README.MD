@@ -1,6 +1,6 @@
 
 # BeeLadybug
-(https://beeenginejs.com/wp-content/uploads/2026/09/Gemini_Generated_Image_pz6kdwpz6kdwpz6k.jpg)
+https://beeenginejs.com/wp-content/uploads/2026/09/Gemini_Generated_Image_pz6kdwpz6kdwpz6k.jpg
 
 
 Universal telemetry and visual inspection overlay.
