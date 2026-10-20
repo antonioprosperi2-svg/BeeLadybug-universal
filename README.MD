@@ -39,6 +39,7 @@ bee-ladybug/
 │   └── adapters/
 │       ├── CanvasAdapter.js
 │       ├── WebDOMAdapter.js
+│       ├── CSSAdapter.js
 │       ├── AntAdapter.js
 │       ├── SpiderAdapter.js
 │       └── python/PythonBridge.js
@@ -46,10 +47,12 @@ bee-ladybug/
 │   ├── core.html
 │   ├── canvas-sandbox.js
 │   ├── dom.html
+│   ├── css-hunt.html
 │   ├── python.html
 │   └── python/sender.py
 ├── tsconfig.json
 ├── package.json
+├── CHANGELOG.md
 ├── LICENSE
 ├── index.html
 └── README.md
@@ -130,6 +133,8 @@ bee.subscribe((packet) => {
 | `F2` | mostra / nascondi overlay (e hitbox canvas) |
 | `F3` | slow-motion del tempo fittizio (`0.25x` / `1x`) |
 | `F4` | freeze / run del tempo fittizio |
+| `F6` | CSS hunt, se `CSSAdapter` è attaccato |
+| `S` | scansione overflow / immagini, solo con la hunt accesa |
 
 Niente `F12`, niente tilde: sui layout italiani la tilde non è un tasto unico.
 
@@ -176,6 +181,28 @@ adapter.attach();
 ```
 
 Traduce il DOM in pacchetti: nodo sotto il puntatore, box model (margin / padding / content), conteggio nodi, mutazioni (`+n -n attr`). `F4` congela l'hover. `F2` nasconde overlay e highlight. Il Core non sa che esiste HTML.
+
+## CSS hunt (F6)
+
+```js
+import { BeeLadybugCore, CSSAdapter } from './src/index.js';
+
+const bee = new BeeLadybugCore();
+const css = new CSSAdapter(bee);
+css.attach();
+```
+
+`F6` (pulsante **F6 CSS** accanto a F3/F4) accende la caccia. Sull'elemento sotto il puntatore l'overlay elenca:
+
+- regole `!important` che gli corrispondono (fogli cross-origin: `unreadable sheet: <href>`)
+- overflow del viewport e margini negativi
+- testo trasparente, `opacity: 0`, o colore uguale allo sfondo
+- chi intercetta il click al centro, inclusi `::before` / `::after` fissi su `html` / `body`
+- `<img>` con rapporto stirato oltre il 5% e `object-fit: fill`
+
+`S` con la hunt accesa esegue overflow e immagini su tutta la pagina e lista i casi peggiori. Un click sulla riga disegna il contorno rosso. I fogli di stile restano in cache finché un `MutationObserver` non vede un cambio a `<style>` o `<link>`. Hover è limitato a un frame.
+
+Demo: `examples/css-hunt.html`.
 
 ## Registro adapter (overlay)
 

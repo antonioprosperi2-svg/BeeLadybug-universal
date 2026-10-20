@@ -9,7 +9,7 @@
 import { UIOverlay } from './UIOverlay.js';
 import { buildAssistantSnapshot, normalizeAssistant } from './AiAssistant.js';
 
-export const BEE_LADYBUG_VERSION = '0.4.1';
+export const BEE_LADYBUG_VERSION = '0.5.0';
 
 export const CORE_DEFAULTS = Object.freeze({
     toggleKey: 'F2',
@@ -98,6 +98,7 @@ export class BeeLadybugCore {
         this.#activeAssistant = null;
         this.#askBusy = false;
         this.#adapters = new Map();
+        this.#detail = [];
 
         this.ui = null;
         if (cfg.ui !== false && typeof document !== 'undefined') {
@@ -132,6 +133,8 @@ export class BeeLadybugCore {
     /** @type {string | null} */
     #activeAssistant;
     #askBusy;
+    /** @type {Array<{ text: string, level?: string, onSelect?: () => void }>} */
+    #detail;
     /** @type {Map<string, { name: string, label: string, enabled: boolean, enable: Function, disable: Function }>} */
     #adapters;
 
@@ -289,7 +292,7 @@ export class BeeLadybugCore {
      * Register a toggleable diagnostic adapter. The core stores hooks only —
      * it does not import or special-case adapter modules.
      * @param {string} name
-     * @param {{ enable: () => void, disable: () => void, label?: string }} hooks
+     * @param {{ enable: () => void, disable: () => void, label?: string, hotkey?: string, enabled?: boolean }} hooks
      */
     registerAdapter(name, hooks = {}) {
         const key = String(name || '').trim();
@@ -301,14 +304,24 @@ export class BeeLadybugCore {
             return this;
         }
         const label = String(hooks.label || key).trim() || key;
+        const hotkey = typeof hooks.hotkey === 'string' ? hooks.hotkey : '';
+        const enabled = hooks.enabled !== false;
         this.#adapters.set(key, {
             name: key,
             label,
-            enabled: true,
+            hotkey,
+            enabled,
             enable: hooks.enable,
             disable: hooks.disable
         });
-        this.sendData('sys', { op: 'adapter', name: key, registered: true, label, enabled: true });
+        this.sendData('sys', {
+            op: 'adapter',
+            name: key,
+            registered: true,
+            label,
+            hotkey,
+            enabled
+        });
         return this;
     }
 
@@ -328,8 +341,19 @@ export class BeeLadybugCore {
         return [...this.#adapters.values()].map((entry) => ({
             name: entry.name,
             label: entry.label,
+            hotkey: entry.hotkey || '',
             enabled: entry.enabled
         }));
+    }
+
+    /**
+     * Clickable rows inside the overlay. The core does not interpret them.
+     * @param {Array<{ text: string, level?: string, onSelect?: () => void }>} items
+     */
+    publishDetail(items) {
+        this.#detail = Array.isArray(items) ? items : [];
+        this.ui?.setDetail(this.#detail);
+        return this;
     }
 
     /**
@@ -438,6 +462,7 @@ export class BeeLadybugCore {
         this.#activeAssistant = null;
         this.#askBusy = false;
         this.#adapters.clear();
+        this.#detail = [];
         this.ui?.destroy();
         this.ui = null;
         return this;
@@ -720,8 +745,25 @@ export class BeeLadybugCore {
         if (code === this.freezeKey) {
             event.preventDefault();
             this.toggleFreeze();
+            return;
+        }
+
+        if (isTypingTarget(event.target)) return;
+
+        for (const entry of this.#adapters.values()) {
+            if (!entry.hotkey || code !== entry.hotkey) continue;
+            event.preventDefault();
+            this.toggleAdapter(entry.name);
+            return;
         }
     }
+}
+
+function isTypingTarget(target) {
+    if (!target || typeof target !== 'object') return false;
+    const tag = target.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+    return Boolean(target.isContentEditable);
 }
 
 function asObject(payload) {

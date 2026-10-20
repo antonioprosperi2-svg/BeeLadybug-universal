@@ -255,6 +255,39 @@ const STYLES = `
 .bl-adapters:empty {
   display: none;
 }
+.bl-hotkeys {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.bl-hotkeys:empty {
+  display: none;
+}
+.bl-detail {
+  max-height: 132px;
+  overflow: auto;
+  background: #07080c;
+  border-top: 1px solid rgba(255, 59, 78, 0.22);
+}
+.bl-detail[hidden] {
+  display: none;
+}
+.bl-detail button {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 4px 10px;
+  border: 0;
+  background: transparent;
+  color: #d8dce6;
+  font: 11px ui-monospace, Consolas, monospace;
+  line-height: 1.4;
+  text-align: left;
+  cursor: pointer;
+}
+.bl-detail button[data-level="warn"] { color: #ffd36a; }
+.bl-detail button[data-level="error"] { color: #ff6b7d; }
+.bl-detail button:hover { background: rgba(255, 255, 255, 0.04); }
 .bl-adapter {
   appearance: none;
   background: #16181f;
@@ -331,6 +364,8 @@ export class UIOverlay {
         this.#mounted = false;
         this.#providerSig = '';
         this.#adapterSig = '';
+        this.#hotkeySig = '';
+        this.#detail = [];
         this.#flashAt = new Map();
         this.#flashTimers = new Map();
     }
@@ -343,6 +378,8 @@ export class UIOverlay {
     #mounted;
     #providerSig;
     #adapterSig;
+    #hotkeySig;
+    #detail;
     #flashAt;
     #flashTimers;
 
@@ -393,11 +430,13 @@ export class UIOverlay {
                   </div>
                 </div>
                 <div class="bl-hud" data-el="hud"></div>
+                <div class="bl-detail" data-el="detail" hidden></div>
                 <div class="bl-console" data-el="console" role="log" aria-live="polite"></div>
                 <div class="bl-foot">
                   <button class="bl-btn" data-act="slow" type="button">F3 SLOW</button>
                   <button class="bl-btn" data-act="freeze" type="button">F4 STOP</button>
                   <button class="bl-btn" data-act="live" type="button">1x LIVE</button>
+                  <span class="bl-hotkeys" data-el="hotkeys"></span>
                   <button class="bl-btn" data-act="ask" type="button">ASK AI</button>
                   <span class="bl-providers" data-el="providers"></span>
                   <span class="bl-adapters" data-el="adapters"></span>
@@ -419,8 +458,10 @@ export class UIOverlay {
             graphStats: this.#root.querySelector('[data-el="graphStats"]'),
             hud: this.#root.querySelector('[data-el="hud"]'),
             console: this.#root.querySelector('[data-el="console"]'),
+            detail: this.#root.querySelector('[data-el="detail"]'),
             providers: this.#root.querySelector('[data-el="providers"]'),
-            adapters: this.#root.querySelector('[data-el="adapters"]')
+            adapters: this.#root.querySelector('[data-el="adapters"]'),
+            hotkeys: this.#root.querySelector('[data-el="hotkeys"]')
         };
 
         this.#root.querySelector('.bl-foot').addEventListener('click', (event) => {
@@ -433,6 +474,13 @@ export class UIOverlay {
             else if (act === 'ask') this.core.ask();
             else if (act === 'assist') this.core.setActiveAssistant(btn.getAttribute('data-name'));
             else if (act === 'adapter') this.core.toggleAdapter(btn.getAttribute('data-name'));
+        });
+
+        this.#root.querySelector('.bl-detail')?.addEventListener('click', (event) => {
+            const row = event.target.closest('[data-detail]');
+            if (!row) return;
+            const item = this.#detail[Number(row.getAttribute('data-detail'))];
+            if (item && typeof item.onSelect === 'function') item.onSelect();
         });
 
         this.#els.console.addEventListener('scroll', () => {
@@ -456,6 +504,8 @@ export class UIOverlay {
         this.#mounted = false;
         this.#providerSig = '';
         this.#adapterSig = '';
+        this.#hotkeySig = '';
+        this.#detail = [];
         this.#clearFlashTimers();
         this.#flashAt.clear();
         return this;
@@ -470,6 +520,29 @@ export class UIOverlay {
     setVisible(visible) {
         if (!this.#els) return this;
         this.#els.root.dataset.visible = visible ? 'true' : 'false';
+        return this;
+    }
+
+    /**
+     * @param {Array<{ text: string, level?: string, onSelect?: () => void }>} items
+     */
+    setDetail(items) {
+        if (!this.#els?.detail) return this;
+        const list = Array.isArray(items) ? items : [];
+        this.#detail = list;
+        const box = this.#els.detail;
+        if (!list.length) {
+            box.innerHTML = '';
+            box.hidden = true;
+            return this;
+        }
+        let html = '';
+        for (let i = 0; i < list.length; i++) {
+            const level = list[i].level === 'error' || list[i].level === 'warn' ? list[i].level : 'info';
+            html += `<button type="button" data-detail="${i}" data-level="${level}">${escapeHtml(list[i].text)}</button>`;
+        }
+        box.hidden = false;
+        box.innerHTML = html;
         return this;
     }
 
@@ -508,6 +581,7 @@ export class UIOverlay {
         this.#renderHud(state.hud);
         this.#syncButtons(state);
         this.#syncProviders(state);
+        this.#syncHotkeys(state);
         this.#syncAdapters(state);
 
         if (this.#stickBottom) {
@@ -584,10 +658,26 @@ export class UIOverlay {
         wrap.innerHTML = html;
     }
 
+    #syncHotkeys(state) {
+        const wrap = this.#els.hotkeys;
+        if (!wrap) return;
+        const list = (Array.isArray(state.adapters) ? state.adapters : []).filter((entry) => entry.hotkey);
+        const sig = list.map((entry) => `${entry.name}\0${entry.label}\0${entry.enabled ? 1 : 0}`).join('\n');
+        if (sig === this.#hotkeySig) return;
+        this.#hotkeySig = sig;
+        let html = '';
+        for (let i = 0; i < list.length; i++) {
+            const entry = list[i];
+            const hot = entry.enabled ? 'true' : 'false';
+            html += `<button class="bl-btn" data-act="adapter" data-name="${escapeHtml(entry.name)}" data-hot="${hot}" type="button">${escapeHtml(entry.label)}</button>`;
+        }
+        wrap.innerHTML = html;
+    }
+
     #syncAdapters(state) {
         const wrap = this.#els.adapters;
         if (!wrap) return;
-        const list = Array.isArray(state.adapters) ? state.adapters : [];
+        const list = (Array.isArray(state.adapters) ? state.adapters : []).filter((entry) => !entry.hotkey);
         const sig = list.map((entry) => `${entry.name}\0${entry.label}\0${entry.enabled ? 1 : 0}`).join('\n');
         if (sig === this.#adapterSig) return;
         this.#adapterSig = sig;

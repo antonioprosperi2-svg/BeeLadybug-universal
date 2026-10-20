@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BeeLadybug — CSS hunt</title>
+    <style>
+        :root { color-scheme: dark; }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            background: #0b0b0e;
+            color: #f1f2f6;
+            font-family: system-ui, -apple-system, sans-serif;
+        }
+        main {
+            margin: 0;
+            padding: 28px 24px 120px 400px;
+            max-width: 1100px;
+        }
+        h1 {
+            color: #ff4757;
+            font-size: 1.7rem;
+            margin: 0 0 0.4rem;
+        }
+        .lede {
+            color: #a4b0be;
+            margin: 0 0 1.2rem;
+            max-width: 62ch;
+        }
+        .bugs {
+            display: grid;
+            gap: 14px;
+        }
+        article {
+            background: #15161c;
+            border: 1px solid #2f3542;
+            padding: 14px 16px;
+        }
+        article h2 {
+            margin: 0 0 0.35rem;
+            font-size: 1rem;
+            color: #ffd36a;
+        }
+        article p {
+            margin: 0 0 0.8rem;
+            color: #a4b0be;
+            font-size: 0.92rem;
+        }
+        .bleed {
+            margin-left: -48px;
+            width: 100vw;
+            max-width: none;
+            padding: 10px 12px;
+            background: #1e1e24;
+            border: 1px solid #ff3b4e;
+            color: #fff;
+            box-sizing: border-box;
+        }
+        .ghost {
+            background: #2f3542 !important;
+            color: transparent !important;
+            border: 1px solid #57606f;
+            padding: 10px 16px;
+            font: 700 14px system-ui, sans-serif;
+        }
+        .pay-wrap {
+            position: relative;
+            display: inline-block;
+        }
+        .pay-wrap button {
+            background: #ff4757;
+            color: #fff;
+            border: 0;
+            padding: 10px 18px;
+            font: 700 14px system-ui, sans-serif;
+        }
+        .click-blocker {
+            position: absolute;
+            inset: 0;
+            background: rgba(255, 71, 87, 0.2);
+        }
+        .stretched {
+            display: block;
+            width: 280px;
+            height: 70px;
+            object-fit: fill;
+            background: #1e1e24;
+        }
+        .mobile-heading {
+            margin: 0;
+            font-size: 1.4rem;
+            color: #ffd36a;
+        }
+        @media (max-width: 1600px) {
+            .mobile-heading {
+                color: #0b0b0e;
+            }
+        }
+        html::after {
+            content: "";
+            position: fixed;
+            right: 16px;
+            bottom: 16px;
+            width: 168px;
+            height: 52px;
+            background: rgba(110, 231, 255, 0.16);
+            z-index: 5;
+        }
+        .terms {
+            position: fixed;
+            right: 36px;
+            bottom: 32px;
+            z-index: 1;
+            color: #6ee7ff;
+        }
+        .row { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 1rem; }
+        #scan {
+            background: #2f3542;
+            color: #fff;
+            border: 1px solid #57606f;
+            padding: 8px 12px;
+            font: 600 13px system-ui, sans-serif;
+            cursor: pointer;
+        }
+        .hint { color: #747d8c; font-size: 0.92rem; margin-top: 1rem; }
+        kbd {
+            background: #2f3542;
+            color: #fff;
+            padding: 0.15rem 0.4rem;
+            border-radius: 4px;
+            font-size: 0.85em;
+        }
+        code { color: #ffd36a; }
+        a { color: #6ee7ff; }
+    </style>
+</head>
+<body>
+    <main>
+        <h1>CSS hunt</h1>
+        <p class="lede">
+            Cinque bug messi apposta. Premi <kbd>F6</kbd> (o il pulsante
+            <code>F6 CSS</code> accanto a F3/F4), passa il mouse sui riquadri,
+            poi <kbd>S</kbd> per la scansione. Un click sulla riga nell'overlay
+            disegna il contorno rosso.
+        </p>
+        <div class="row">
+            <button id="scan" type="button">Scan page</button>
+        </div>
+        <div class="bugs">
+            <article>
+                <h2>1. Margine negativo</h2>
+                <p>Margine sinistro negativo e larghezza <code>100vw</code>: esce dal bordo destro del viewport.</p>
+                <div class="bleed">Card fuori schermo</div>
+            </article>
+            <article>
+                <h2>2. Testo trasparente + !important</h2>
+                <p>Il bottone ha <code>color: transparent !important</code>. Il testo c'è, non si legge.</p>
+                <button class="ghost" type="button">Acquista ora</button>
+            </article>
+            <article>
+                <h2>3. Click blocker</h2>
+                <p>Un pannello assoluto copre «Paga». In basso a destra, <code>html::after</code> copre «Termini».</p>
+                <div class="pay-wrap">
+                    <button type="button">Paga</button>
+                    <div class="click-blocker"></div>
+                </div>
+            </article>
+            <article>
+                <h2>4. Immagine stirata</h2>
+                <p>SVG quadrato disegnato 280×70 con <code>object-fit: fill</code>.</p>
+                <img class="stretched" alt="Banner stirato" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Crect width='100' height='100' fill='%233498db'/%3E%3Ccircle cx='50' cy='50' r='28' fill='%23ffd36a'/%3E%3C/svg%3E">
+            </article>
+            <article>
+                <h2>5. Titolo nascosto sotto i 1600px</h2>
+                <p>In viewport stretta (o normale da laptop) il titolo ha lo stesso colore dello sfondo.</p>
+                <h3 class="mobile-heading">Solo mobile</h3>
+            </article>
+        </div>
+        <p class="hint">
+            <kbd>F6</kbd> hunt · <kbd>S</kbd> scan · <kbd>F2</kbd> overlay.
+            <a href="../index.html">Canvas</a> ·
+            <a href="./dom.html">DOM</a> ·
+            <a href="./core.html">Core</a>
+        </p>
+    </main>
+    <a class="terms" href="#terms">Termini</a>
+    <script type="module" src="./css-hunt.js"></script>
+</body>
+</html>

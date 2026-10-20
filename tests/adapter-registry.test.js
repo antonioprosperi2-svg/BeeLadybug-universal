@@ -21,7 +21,7 @@ test('registerAdapter tiene hooks generici senza nomi hardcodati', () => {
     });
 
     assert.deepEqual(bee.getAdapters(), [
-        { name: 'probe', label: 'PROBE', enabled: true }
+        { name: 'probe', label: 'PROBE', hotkey: '', enabled: true }
     ]);
     assert.equal(bee.getState().adapters[0].label, 'PROBE');
 

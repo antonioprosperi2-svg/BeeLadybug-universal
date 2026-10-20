@@ -112,11 +112,14 @@ export interface AdapterHooks {
     enable(): void;
     disable(): void;
     label?: string;
+    hotkey?: string;
+    enabled?: boolean;
 }
 
 export interface AdapterInfo {
     name: string;
     label: string;
+    hotkey: string;
     enabled: boolean;
 }
 
@@ -174,6 +177,13 @@ export class BeeLadybugCore {
     getAdapters(): AdapterInfo[];
     toggleAdapter(name: string): this;
     setAdapterEnabled(name: string, enabled: boolean): this;
+    publishDetail(items: DetailItem[]): this;
+}
+
+export interface DetailItem {
+    text: string;
+    level?: 'info' | 'warn' | 'error';
+    onSelect?: () => void;
 }
 
 export class UIOverlay {
@@ -186,6 +196,7 @@ export class UIOverlay {
     onPacket(packet: BeePacket): void;
     onClear(channel?: string): void;
     render(): void;
+    setDetail(items: DetailItem[]): this;
 }
 
 export interface CanvasEntity {
@@ -270,6 +281,30 @@ export class WebDOMAdapter {
     detach(): this;
     setRoot(root: ParentNode | null): this;
     pump(): this;
+}
+
+export interface CSSAdapterOptions {
+    source?: string;
+    hotkey?: string;
+    scanKey?: string;
+    label?: string;
+    maxScan?: number;
+}
+
+export const CSS_ADAPTER_DEFAULTS: Required<CSSAdapterOptions>;
+
+export class CSSAdapter {
+    core: BeeLadybugCore | null;
+    source: string;
+    hotkey: string;
+    scanKey: string;
+    label: string;
+    maxScan: number;
+    readonly active: boolean;
+    constructor(core: BeeLadybugCore, options?: CSSAdapterOptions);
+    attach(): this;
+    detach(): this;
+    scan(): this;
 }
 
 export interface AntAdapterOptions {
