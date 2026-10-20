@@ -112,43 +112,61 @@ export class CSSAdapter {
         return this;
     }
 
-    /** Checks 2 and 5 across the document. Click a row to outline it. */
+    /** Page scan. Click a row to outline one element of that group. */
     scan() {
         if (!this.#active || typeof document === 'undefined') return this;
         if (this.#sheetsDirty) this.#rebuildSheets();
         const nodes = document.body ? document.body.querySelectorAll('*') : [];
-        const offenders = [];
+        const overflow = [];
+        const rows = [];
         for (let i = 0; i < nodes.length; i++) {
             const el = nodes[i];
             if (!el || isBeeChrome(el) || isSkippedTag(el)) continue;
+            const measured = measureViewportOverflow(el);
+            if (measured) overflow.push(measured);
             const findings = [];
-            pushOverflow(el, findings);
+            pushNegativeMargins(el, findings);
+            pushInvisible(el, findings);
+            pushBlockers(el, findings);
             pushImage(el, findings);
-            if (!findings.length) continue;
-            let score = 0;
-            for (let j = 0; j < findings.length; j++) score += findings[j].score;
-            offenders.push({ el, findings, score });
+            pushImportant(el, this.#rules, findings);
+            for (let j = 0; j < findings.length; j++) {
+                rows.push({ el, selector: cssPath(el), ...findings[j] });
+            }
         }
-        offenders.sort((a, b) => b.score - a.score);
-        const top = offenders.slice(0, this.maxScan);
-        const items = top.map((entry) => ({
-            level: 'error',
-            text: `${cssPath(entry.el)} — ${entry.findings.map((hit) => hit.text).join('; ')}`,
-            onSelect: () => this.#pin(entry.el)
+        const causes = keepOverflowCauses(overflow);
+        for (let i = 0; i < causes.length; i++) {
+            const cause = causes[i];
+            rows.push({
+                el: cause.el,
+                selector: cssPath(cause.el),
+                kind: 'overflows viewport',
+                rank: 0,
+                level: 'error',
+                score: cause.score
+            });
+        }
+        const groups = groupIssues(rows).slice(0, this.maxScan);
+        const items = groups.map((group) => ({
+            level: group.level,
+            text: formatIssue(group),
+            onSelect: () => this.#pin(group.el)
         }));
         this.#lastEl = null;
         this.core?.publishDetail(items);
         this.core?.sendData('state', {
             source: this.source,
             key: 'css.scan',
-            value: String(top.length)
+            value: String(groups.length)
         });
-        this.core?.sendData('warn', {
-            source: this.source,
-            message: top.length
-                ? `scan ${top.length} offender(s). Click a row to outline it.`
-                : 'scan clean: no overflow or distorted images.'
-        });
+        if (groups.length || isVerbose(this.core)) {
+            this.core?.sendData('warn', {
+                source: this.source,
+                message: groups.length
+                    ? `scan ${groups.length} issue(s). Click a row to outline it.`
+                    : 'scan clean: no causes found.'
+            });
+        }
         return this;
     }
 
@@ -267,7 +285,9 @@ export class CSSAdapter {
             onSelect: () => this.#pin(el)
         })));
         if (!findings.length) {
-            this.core?.sendData('log', { source: this.source, message: `${path}  clean` });
+            if (isVerbose(this.core)) {
+                this.core?.sendData('log', { source: this.source, message: `${path}  clean` });
+            }
             return;
         }
         const lead = findings.find((hit) => hit.level === 'error') || findings[0];
@@ -380,7 +400,9 @@ function pushImportant(el, rules, findings) {
             const prop = rule.props[j];
             findings.push({
                 level: 'warn',
+                rank: 4,
                 score: 5,
+                kind: `!important ${rule.selector} { ${prop.property}: ${prop.value} }`,
                 text: `!important ${rule.selector} { ${prop.property}: ${prop.value} } @ ${rule.source}`
             });
         }
@@ -388,19 +410,75 @@ function pushImportant(el, rules, findings) {
 }
 
 function pushOverflow(el, findings) {
-    if (!el.getBoundingClientRect || el === document.documentElement || el === document.body) return;
-    const rect = el.getBoundingClientRect();
-    const view = document.documentElement.clientWidth;
-    if (rect.left < -1 || rect.right > view + 1) {
-        const past = rect.left < -1
-            ? `left ${Math.round(rect.left)}px`
-            : `right +${Math.round(rect.right - view)}px`;
+    const measured = measureViewportOverflow(el);
+    if (measured) {
+        const past = measured.left > 1
+            ? `left ${Math.round(-measured.left)}px`
+            : `right +${Math.round(measured.right)}px`;
         findings.push({
             level: 'error',
-            score: Math.abs(rect.left < -1 ? rect.left : rect.right - view),
+            rank: 0,
+            score: measured.score,
+            kind: 'overflows viewport',
             text: `overflows viewport (${past})`
         });
     }
+    pushNegativeMargins(el, findings);
+}
+
+function measureViewportOverflow(el) {
+    if (!el || typeof el.getBoundingClientRect !== 'function') return null;
+    if (typeof document === 'undefined') return null;
+    if (el === document.documentElement || el === document.body) return null;
+    const rect = el.getBoundingClientRect();
+    const view = document.documentElement.clientWidth;
+    const left = rect.left < -1 ? -rect.left : 0;
+    const right = rect.right > view + 1 ? rect.right - view : 0;
+    if (left <= 1 && right <= 1) return null;
+    return { el, left, right, width: rect.width, view, score: Math.max(left, right) };
+}
+
+/**
+ * Keep the node that actually sticks out.
+ * Drop a parent when a descendant overflows by the same amount (±2px),
+ * and drop a box whose own width fits the viewport when a child is the one overflowing.
+ * @param {Array<{ el: Element, left: number, right: number, width: number, view: number, score: number }>} items
+ */
+export function keepOverflowCauses(items) {
+    return items.filter((item) => !echoedByDescendant(item, items) && !fitsOnlyBecauseOfChild(item, items));
+}
+
+function echoedByDescendant(item, items) {
+    for (let i = 0; i < items.length; i++) {
+        const other = items[i];
+        if (other.el === item.el || typeof item.el.contains !== 'function' || !item.el.contains(other.el)) continue;
+        const leftEcho = item.left <= 1 || Math.abs(item.left - other.left) <= 2;
+        const rightEcho = item.right <= 1 || Math.abs(item.right - other.right) <= 2;
+        const matched = (item.left > 1 && Math.abs(item.left - other.left) <= 2)
+            || (item.right > 1 && Math.abs(item.right - other.right) <= 2);
+        if (matched && leftEcho && rightEcho) return true;
+    }
+    return false;
+}
+
+function fitsOnlyBecauseOfChild(item, items) {
+    if (item.width > item.view + 2) return false;
+    if (item.left <= 1 && item.right <= 1) return false;
+    let leftOk = item.left <= 1;
+    let rightOk = item.right <= 1;
+    let childOverflows = false;
+    for (let i = 0; i < items.length; i++) {
+        const other = items[i];
+        if (other.el === item.el || typeof item.el.contains !== 'function' || !item.el.contains(other.el)) continue;
+        if (other.left > 1 || other.right > 1) childOverflows = true;
+        if (item.left > 1 && other.left + 2 >= item.left) leftOk = true;
+        if (item.right > 1 && other.right + 2 >= item.right) rightOk = true;
+    }
+    return childOverflows && leftOk && rightOk;
+}
+
+function pushNegativeMargins(el, findings) {
+    if (typeof getComputedStyle !== 'function') return;
     const style = getComputedStyle(el);
     const sides = ['top', 'right', 'bottom', 'left'];
     for (let i = 0; i < sides.length; i++) {
@@ -409,26 +487,64 @@ function pushOverflow(el, findings) {
         if (!Number.isFinite(value) || value >= 0) continue;
         findings.push({
             level: 'warn',
+            rank: 5,
             score: Math.abs(value),
+            kind: `negative margin margin-${sides[i]}: ${raw.trim()}`,
             text: `negative margin margin-${sides[i]}: ${raw.trim()}`
         });
     }
+}
+
+const ISSUE_RANK = Object.freeze({
+    overflow: 0,
+    blocker: 1,
+    invisible: 2,
+    image: 3,
+    important: 4
+});
+
+/**
+ * @param {Array<{ selector: string, kind: string, rank: number, level: string, score: number, el?: Element }>} rows
+ */
+export function groupIssues(rows) {
+    const map = new Map();
+    for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
+        const kind = row.kind || row.text;
+        const key = `${row.selector}\0${kind}`;
+        const prev = map.get(key);
+        if (!prev) {
+            map.set(key, { ...row, kind, count: 1 });
+            continue;
+        }
+        prev.count += 1;
+        if (row.score > prev.score) {
+            prev.score = row.score;
+            prev.el = row.el;
+        }
+    }
+    return [...map.values()].sort((a, b) => a.rank - b.rank || b.score - a.score || b.count - a.count);
+}
+
+export function formatIssue(group) {
+    const count = group.count > 1 ? ` ×${group.count}` : '';
+    return `${group.selector} ${group.kind}${count}`;
 }
 
 function pushInvisible(el, findings) {
     if (!hasOwnText(el)) return;
     const style = getComputedStyle(el);
     if (opacityZero(el)) {
-        findings.push({ level: 'error', score: 30, text: 'invisible text (opacity 0)' });
+        findings.push(issue('invisible text (opacity 0)', ISSUE_RANK.invisible, 30));
     }
     const color = parseColor(style.color);
     if (!color || color.a === 0) {
-        findings.push({ level: 'error', score: 30, text: 'invisible text (transparent color)' });
+        findings.push(issue('invisible text (transparent color)', ISSUE_RANK.invisible, 30));
         return;
     }
     const behind = paintBehind(el);
     if (behind && nearlySame(color, behind)) {
-        findings.push({ level: 'error', score: 30, text: 'invisible text (color matches background)' });
+        findings.push(issue('invisible text (color matches background)', ISSUE_RANK.invisible, 30));
     }
 }
 
@@ -440,12 +556,12 @@ function pushBlockers(el, findings) {
     if (x < 0 || y < 0 || x > window.innerWidth || y > window.innerHeight) return;
     const pseudo = coveringPseudo(x, y);
     if (pseudo) {
-        findings.push({ level: 'error', score: 40, text: `click blocked by ${pseudo}` });
+        findings.push(issue(`click blocked by ${pseudo}`, ISSUE_RANK.blocker, 40));
     }
     const hit = document.elementFromPoint(x, y);
     if (!hit || isBeeChrome(hit) || hit === el || el.contains(hit)) return;
     if (pseudo && (hit === document.documentElement || hit === document.body)) return;
-    findings.push({ level: 'error', score: 40, text: `click blocked by ${cssPath(hit)}` });
+    findings.push(issue(`click blocked by ${cssPath(hit)}`, ISSUE_RANK.blocker, 40));
 }
 
 function pushImage(el, findings) {
@@ -462,9 +578,19 @@ function pushImage(el, findings) {
     if (diff <= 0.05 || fit !== 'fill') return;
     findings.push({
         level: 'error',
+        rank: ISSUE_RANK.image,
         score: diff * 100,
+        kind: 'distorted image',
         text: `distorted image ${Math.round(diff * 100)}% (object-fit: fill)`
     });
+}
+
+function issue(kind, rank, score) {
+    return { level: 'error', rank, score, kind, text: kind };
+}
+
+function isVerbose(core) {
+    return Boolean(core) && !core.frozen && core.timeScale !== 1;
 }
 
 function coveringPseudo(x, y) {

@@ -134,7 +134,7 @@ bee.subscribe((packet) => {
 | `F3` | slow-motion del tempo fittizio (`0.25x` / `1x`) |
 | `F4` | freeze / run del tempo fittizio |
 | `F6` | CSS hunt, se `CSSAdapter` è attaccato |
-| `S` | scansione overflow / immagini, solo con la hunt accesa |
+| `S` | scansione CSS, solo con la hunt accesa |
 
 Niente `F12`, niente tilde: sui layout italiani la tilde non è un tasto unico.
 
@@ -200,7 +200,7 @@ css.attach();
 - chi intercetta il click al centro, inclusi `::before` / `::after` fissi su `html` / `body`
 - `<img>` con rapporto stirato oltre il 5% e `object-fit: fill`
 
-`S` con la hunt accesa esegue overflow e immagini su tutta la pagina e lista i casi peggiori. Un click sulla riga disegna il contorno rosso. I fogli di stile restano in cache finché un `MutationObserver` non vede un cambio a `<style>` o `<link>`. Hover è limitato a un frame.
+`S` con la hunt accesa percorre la pagina. L'overflow resta solo sull'elemento che lo causa: un antenato si salta se un discendente sfora della stessa quantità (±2px), oppure se la larghezza del box ci sta nel viewport e a uscire è un figlio. Righe uguali (stesso selettore e stesso problema) diventano una sola, con il conteggio (`article overflows viewport ×4`). L'ordine è: causa di overflow, click bloccato, testo invisibile, immagine distorta, `!important`. Un click sulla riga disegna il contorno rosso. In console un elemento pulito non viene scritto, a meno che `F3` SLOW sia acceso. I fogli di stile restano in cache finché un `MutationObserver` non vede un cambio a `<style>` o `<link>`. Hover è limitato a un frame.
 
 Demo: `examples/css-hunt.html`.
 
