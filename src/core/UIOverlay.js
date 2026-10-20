@@ -35,6 +35,9 @@ const STYLES = `
   top: 12px;
   left: 12px;
   width: 360px;
+  max-height: 50vh;
+  display: flex;
+  flex-direction: column;
   background: rgba(7, 8, 12, 0.94);
   border: 1px solid rgba(255, 59, 78, 0.55);
   box-sizing: border-box;
@@ -62,6 +65,7 @@ const STYLES = `
   display: flex;
   align-items: center;
   gap: 8px;
+  flex: 0 0 auto;
   padding: 10px 12px 8px;
   border-bottom: 1px solid rgba(255, 59, 78, 0.28);
 }
@@ -201,7 +205,7 @@ const STYLES = `
 .bl-k { color: #8b91a3; }
 .bl-v { color: #e9edf5; }
 .bl-console {
-  height: 168px;
+  max-height: 140px;
   overflow: auto;
   padding: 6px 10px 8px;
   background: #05060a;
@@ -212,13 +216,14 @@ const STYLES = `
 .bl-line { white-space: normal; word-break: break-word; }
 .bl-line .t { color: #8b91a3; margin-right: 8px; }
 .bl-line .s { color: #6ee7ff; margin-right: 8px; }
-.bl-line.info .m { color: #d8dce6; }
+.bl-line.info .m { color: #8b91a3; }
 .bl-line.warn .m { color: #ffd36a; }
 .bl-line.error .m { color: #ff6b7d; }
 .bl-line.debug .m { color: #8b91a3; }
 .bl-foot {
   display: flex;
   align-items: center;
+  flex: 0 0 auto;
   flex-wrap: wrap;
   gap: 6px;
   padding: 8px 10px;
@@ -263,35 +268,72 @@ const STYLES = `
 .bl-hotkeys:empty {
   display: none;
 }
-.bl-issues {
-  overflow: hidden;
-  background: #07080c;
-  border-top: 1px solid rgba(255, 59, 78, 0.55);
+.bl-scroll {
+  overflow: auto;
+  min-height: 0;
+  flex: 1 1 auto;
 }
-.bl-issues[hidden] {
-  display: none;
-}
-.bl-issues-label {
-  padding: 5px 10px 0;
-  color: #ff3b4e;
-  font-size: 9px;
-  font-weight: 700;
+.bl-section[hidden] { display: none; }
+.bl-section-toggle {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 5px 10px;
+  border: 0;
+  border-top: 1px solid rgba(255, 59, 78, 0.28);
+  background: #101218;
+  color: #ffd36a;
+  font: 700 9px ui-monospace, Consolas, monospace;
   letter-spacing: 0.14em;
+  text-align: left;
+  cursor: pointer;
 }
-.bl-issues button {
+.bl-section-toggle::before { content: "▾  "; }
+.bl-section[data-open="false"] > .bl-section-toggle::before { content: "▸  "; }
+.bl-section[data-open="false"] > .bl-section-body { display: none; }
+.bl-issues {
+  background: #07080c;
+}
+.bl-legend {
+  display: flex;
+  gap: 14px;
+  padding: 4px 10px 2px;
+  color: #8b91a3;
+  font-size: 10px;
+}
+.bl-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 5px;
+  border-radius: 50%;
+  vertical-align: baseline;
+}
+.bl-dot.bug { background: #ff3b4e; }
+.bl-dot.info { background: #8b91a3; }
+.bl-cause > button,
+.bl-cause-kids button,
+.bl-note {
   display: block;
   width: 100%;
   margin: 0;
   padding: 3px 10px;
   border: 0;
   background: transparent;
-  color: #ff6b7d;
   font: 11px ui-monospace, Consolas, monospace;
   line-height: 1.4;
   text-align: left;
+}
+.bl-cause > button,
+.bl-cause-kids button {
+  color: #ff6b7d;
   cursor: pointer;
 }
-.bl-issues button:hover { background: rgba(255, 59, 78, 0.08); }
+.bl-cause-kids[hidden] { display: none; }
+.bl-cause-kids button { padding-left: 22px; }
+.bl-cause > button:hover,
+.bl-cause-kids button:hover { background: rgba(255, 59, 78, 0.08); }
+.bl-note { color: #8b91a3; }
 .bl-detail {
   max-height: 132px;
   overflow: auto;
@@ -396,6 +438,8 @@ export class UIOverlay {
         this.#hotkeySig = '';
         this.#detail = [];
         this.#issues = [];
+        this.#issueNotes = [];
+        this.#openCauses = new Set();
         this.#flashAt = new Map();
         this.#flashTimers = new Map();
     }
@@ -411,6 +455,8 @@ export class UIOverlay {
     #hotkeySig;
     #detail;
     #issues;
+    #issueNotes;
+    #openCauses;
     #flashAt;
     #flashTimers;
 
@@ -447,6 +493,10 @@ export class UIOverlay {
                     </button>
                   </span>
                 </div>
+                <div class="bl-scroll">
+                <section class="bl-section" data-section="status" data-open="true">
+                  <button class="bl-section-toggle" type="button" data-section-toggle aria-expanded="true">STATUS</button>
+                  <div class="bl-section-body">
                 <div class="bl-stats">
                   <div>HOST <b data-el="hostFps">—</b></div>
                   <div>CORE <b data-el="coreFps">—</b></div>
@@ -461,12 +511,32 @@ export class UIOverlay {
                   </div>
                 </div>
                 <div class="bl-hud" data-el="hud"></div>
-                <div class="bl-issues" data-el="issues" hidden>
-                  <div class="bl-issues-label">ISSUES</div>
-                  <div data-el="issues-list"></div>
+                  </div>
+                </section>
+                <section class="bl-section" data-el="issues" data-section="issues" data-open="true" hidden>
+                  <button class="bl-section-toggle" type="button" data-section-toggle aria-expanded="true">ISSUES</button>
+                  <div class="bl-section-body">
+                    <div class="bl-legend">
+                      <span><i class="bl-dot bug"></i>bug</span>
+                      <span><i class="bl-dot info"></i>info</span>
+                    </div>
+                    <div data-el="issues-list"></div>
+                    <div data-el="notes"></div>
+                  </div>
+                </section>
+                <section class="bl-section" data-el="inspect" data-section="inspect" data-open="true" hidden>
+                  <button class="bl-section-toggle" type="button" data-section-toggle aria-expanded="true">INSPECT</button>
+                  <div class="bl-section-body">
+                    <div class="bl-detail" data-el="detail" hidden></div>
+                  </div>
+                </section>
+                <section class="bl-section" data-section="events" data-open="true">
+                  <button class="bl-section-toggle" type="button" data-section-toggle aria-expanded="true">EVENTS</button>
+                  <div class="bl-section-body">
+                    <div class="bl-console" data-el="console" role="log" aria-live="polite"></div>
+                  </div>
+                </section>
                 </div>
-                <div class="bl-detail" data-el="detail" hidden></div>
-                <div class="bl-console" data-el="console" role="log" aria-live="polite"></div>
                 <div class="bl-foot">
                   <button class="bl-btn" data-act="slow" type="button">F3 SLOW</button>
                   <button class="bl-btn" data-act="freeze" type="button">F4 STOP</button>
@@ -494,8 +564,10 @@ export class UIOverlay {
             hud: this.#root.querySelector('[data-el="hud"]'),
             console: this.#root.querySelector('[data-el="console"]'),
             detail: this.#root.querySelector('[data-el="detail"]'),
+            inspect: this.#root.querySelector('[data-el="inspect"]'),
             issues: this.#root.querySelector('[data-el="issues"]'),
             issuesList: this.#root.querySelector('[data-el="issues-list"]'),
+            notes: this.#root.querySelector('[data-el="notes"]'),
             providers: this.#root.querySelector('[data-el="providers"]'),
             adapters: this.#root.querySelector('[data-el="adapters"]'),
             hotkeys: this.#root.querySelector('[data-el="hotkeys"]')
@@ -513,11 +585,40 @@ export class UIOverlay {
             else if (act === 'adapter') this.core.toggleAdapter(btn.getAttribute('data-name'));
         });
 
-        this.#root.querySelector('.bl-issues')?.addEventListener('click', (event) => {
+        this.#root.querySelector('.bl-scroll')?.addEventListener('click', (event) => {
+            const toggle = event.target.closest('[data-section-toggle]');
+            if (!toggle) return;
+            const section = toggle.closest('.bl-section');
+            if (!section) return;
+            const open = section.dataset.open === 'false';
+            section.dataset.open = open ? 'true' : 'false';
+            toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+        });
+
+        this.#els.issues?.addEventListener('click', (event) => {
+            if (event.target.closest('[data-section-toggle]')) return;
+            const childBtn = event.target.closest('[data-target]');
+            if (childBtn) {
+                const item = this.#issues[Number(childBtn.getAttribute('data-issue'))];
+                const child = item?.targets?.[Number(childBtn.getAttribute('data-target'))];
+                if (child && typeof child.onSelect === 'function') child.onSelect();
+                return;
+            }
             const row = event.target.closest('[data-issue]');
             if (!row) return;
             const item = this.#issues[Number(row.getAttribute('data-issue'))];
-            if (item && typeof item.onSelect === 'function') item.onSelect();
+            if (!item) return;
+            const many = Array.isArray(item.targets) && item.targets.length > 1;
+            if (many) {
+                const key = item.key || item.text;
+                if (this.#openCauses.has(key)) this.#openCauses.delete(key);
+                else this.#openCauses.add(key);
+                this.setIssues(this.#issues.concat(this.#issueNotes));
+                return;
+            }
+            const only = item.targets?.[0];
+            if (only && typeof only.onSelect === 'function') only.onSelect();
+            else if (typeof item.onSelect === 'function') item.onSelect();
         });
 
         this.#root.querySelector('.bl-detail')?.addEventListener('click', (event) => {
@@ -551,6 +652,8 @@ export class UIOverlay {
         this.#hotkeySig = '';
         this.#detail = [];
         this.#issues = [];
+        this.#issueNotes = [];
+        this.#openCauses.clear();
         this.#clearFlashTimers();
         this.#flashAt.clear();
         return this;
@@ -576,9 +679,11 @@ export class UIOverlay {
         const list = Array.isArray(items) ? items : [];
         this.#detail = list;
         const box = this.#els.detail;
+        const section = this.#els.inspect;
         if (!list.length) {
             box.innerHTML = '';
             box.hidden = true;
+            if (section) section.hidden = true;
             return this;
         }
         let html = '';
@@ -587,30 +692,58 @@ export class UIOverlay {
             html += `<button type="button" data-detail="${i}" data-level="${level}">${escapeHtml(list[i].text)}</button>`;
         }
         box.hidden = false;
+        if (section) section.hidden = false;
         box.innerHTML = html;
         return this;
     }
 
     /**
-     * Red warnings pinned above the scrolling console. Newest first.
-     * @param {Array<{ text: string, level?: string, onSelect?: () => void }>} items
+     * Cause rows plus grey info notes. Bugs are red and expand; info stays grey.
+     * @param {Array<{ text: string, level?: string, key?: string, onSelect?: () => void, targets?: Array<{ text: string, onSelect?: () => void }> }>} items
      */
     setIssues(items) {
-        if (!this.#els?.issues || !this.#els.issuesList) return this;
-        const list = Array.isArray(items) ? items.slice(0, 10) : [];
-        this.#issues = list;
-        const box = this.#els.issues;
-        if (!list.length) {
+        if (!this.#els?.issues || !this.#els.issuesList || !this.#els.notes) return this;
+        const list = Array.isArray(items) ? items : [];
+        const bugs = [];
+        const notes = [];
+        for (let i = 0; i < list.length; i++) {
+            if (list[i].level === 'info') notes.push(list[i]);
+            else bugs.push(list[i]);
+        }
+        const capped = bugs.slice(0, 10);
+        this.#issues = capped;
+        this.#issueNotes = notes;
+        const section = this.#els.issues;
+        if (!capped.length && !notes.length) {
             this.#els.issuesList.innerHTML = '';
-            box.hidden = true;
+            this.#els.notes.innerHTML = '';
+            section.hidden = true;
             return this;
         }
         let html = '';
-        for (let i = 0; i < list.length; i++) {
-            html += `<button type="button" data-issue="${i}">${escapeHtml(list[i].text)}</button>`;
+        for (let i = 0; i < capped.length; i++) {
+            const item = capped[i];
+            const targets = Array.isArray(item.targets) ? item.targets : [];
+            const many = targets.length > 1;
+            const open = many && this.#openCauses.has(item.key || item.text);
+            html += `<div class="bl-cause" data-open="${open ? 'true' : 'false'}">`;
+            html += `<button type="button" data-issue="${i}">${many ? (open ? '▾ ' : '▸ ') : ''}${escapeHtml(item.text)}</button>`;
+            if (many) {
+                html += `<div class="bl-cause-kids"${open ? '' : ' hidden'}>`;
+                for (let j = 0; j < targets.length; j++) {
+                    html += `<button type="button" data-issue="${i}" data-target="${j}">${escapeHtml(targets[j].text)}</button>`;
+                }
+                html += '</div>';
+            }
+            html += '</div>';
         }
-        box.hidden = false;
         this.#els.issuesList.innerHTML = html;
+        let noteHtml = '';
+        for (let i = 0; i < notes.length; i++) {
+            noteHtml += `<div class="bl-note">${escapeHtml(notes[i].text)}</div>`;
+        }
+        this.#els.notes.innerHTML = noteHtml;
+        section.hidden = false;
         return this;
     }
 

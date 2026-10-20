@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.3
+
+- Issues group by cause: one red line such as `body::after blocks clicks on 10 elements`, expanded on click.
+- An unreadable stylesheet is a single grey info line per sheet. It is not repeated on every element and it is not a bug.
+- The overlay stays within 50vh and scrolls inside. Status, Issues, Inspect and Events collapse. Issues opens with a red/grey legend.
+
 ## 0.5.2
 
 - Distorted images compare the file ratio with the rendered box from `getBoundingClientRect`, only when computed `object-fit` is `fill`.

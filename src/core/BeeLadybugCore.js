@@ -9,7 +9,7 @@
 import { UIOverlay } from './UIOverlay.js';
 import { buildAssistantSnapshot, normalizeAssistant } from './AiAssistant.js';
 
-export const BEE_LADYBUG_VERSION = '0.5.2';
+export const BEE_LADYBUG_VERSION = '0.5.3';
 
 export const CORE_DEFAULTS = Object.freeze({
     toggleKey: 'F2',
@@ -364,7 +364,7 @@ export class BeeLadybugCore {
      * @param {Array<{ text: string, level?: string, onSelect?: () => void }>} items
      */
     publishIssues(items) {
-        const list = Array.isArray(items) ? items.slice(0, 10) : [];
+        const list = Array.isArray(items) ? items : [];
         this.#issues = list;
         this.ui?.setIssues(this.#issues);
         return this;

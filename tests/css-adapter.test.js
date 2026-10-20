@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { BeeLadybugCore, CSSAdapter } from '../src/index.js';
-import { formatIssue, groupIssues, isDistortedImage, keepOverflowCauses, pushStickyIssue, rememberIssue } from '../src/adapters/CSSAdapter.js';
+import { addCause, describeCause, formatCause, formatIssue, groupIssues, isDistortedImage, keepOverflowCauses, pushStickyIssue, rememberIssue } from '../src/adapters/CSSAdapter.js';
 import { domNoiseQuiet } from '../src/adapters/WebDOMAdapter.js';
 
 function makeCore() {
@@ -111,4 +111,19 @@ test('domNoiseQuiet tace hover e mutate attr con F6 acceso, salvo F3 SLOW', () =
     assert.equal(domNoiseQuiet(true, true, 0.25), true);
     assert.equal(domNoiseQuiet(true, false, 0.25), false);
     assert.equal(domNoiseQuiet(false, false, 1), false);
+});
+
+test('addCause raggruppa un blocco click in una sola riga', () => {
+    let list = [];
+    for (let i = 0; i < 10; i++) {
+        list = addCause(list, {
+            kind: 'click blocked by body::after',
+            path: `a.link${i}`,
+            el: { id: i }
+        }, 10);
+    }
+    assert.equal(list.length, 1);
+    assert.equal(formatCause(list[0]), 'body::after blocks clicks on 10 elements');
+    assert.equal(list[0].targets.length, 10);
+    assert.equal(describeCause('unreadable sheet: https://cdn.example/a.css', 'button'), null);
 });

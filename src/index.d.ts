@@ -185,6 +185,8 @@ export interface DetailItem {
     text: string;
     level?: 'info' | 'warn' | 'error';
     onSelect?: () => void;
+    key?: string;
+    targets?: Array<{ text: string; onSelect?: () => void }>;
 }
 
 export class UIOverlay {

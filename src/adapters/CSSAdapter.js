@@ -42,7 +42,6 @@ export class CSSAdapter {
         this.#attached = false;
         this.#active = false;
         this.#rules = [];
-        this.#unreadable = [];
         this.#sheetsDirty = true;
         this.#x = 0;
         this.#y = 0;
@@ -51,6 +50,8 @@ export class CSSAdapter {
         this.#pinned = null;
         this.#panelLock = false;
         this.#issues = [];
+        this.#notes = [];
+        this.#seenSheets = new Set();
         this.#issueLog = new Map();
         this.#hoverBox = null;
         this.#pinBox = null;
@@ -72,7 +73,6 @@ export class CSSAdapter {
     #attached;
     #active;
     #rules;
-    #unreadable;
     #sheetsDirty;
     #x;
     #y;
@@ -81,6 +81,8 @@ export class CSSAdapter {
     #pinned;
     #panelLock;
     #issues;
+    #notes;
+    #seenSheets;
     #issueLog;
     #hoverBox;
     #pinBox;
@@ -159,7 +161,11 @@ export class CSSAdapter {
             });
         }
         const groups = groupIssues(rows);
-        for (let i = groups.length - 1; i >= 0; i--) this.#stickGroup(groups[i]);
+        for (let i = 0; i < rows.length; i++) {
+            const row = rows[i];
+            this.#rememberCause(row.el, row.selector, row.kind);
+        }
+        this.#publishIssues();
         const shown = groups.slice(0, this.maxScan);
         const items = shown.map((group) => ({
             level: group.level,
@@ -228,6 +234,8 @@ export class CSSAdapter {
         this.#pinned = null;
         this.#panelLock = false;
         this.#issues = [];
+        this.#notes = [];
+        this.#seenSheets.clear();
         this.#issueLog.clear();
         this.#unmountBoxes();
         this.core?.publishDetail([]);
@@ -264,13 +272,8 @@ export class CSSAdapter {
         this.#sheetsDirty = false;
         const built = collectImportantRules();
         this.#rules = built.rules;
-        this.#unreadable = built.unreadable;
-        for (let i = 0; i < built.unreadable.length; i++) {
-            this.core?.sendData('warn', {
-                source: this.source,
-                message: `unreadable sheet: ${built.unreadable[i]}`
-            });
-        }
+        for (let i = 0; i < built.unreadable.length; i++) this.#rememberSheet(built.unreadable[i]);
+        this.#publishIssues();
     }
 
     #inspect(x, y) {
@@ -290,13 +293,6 @@ export class CSSAdapter {
         pushInvisible(el, findings);
         pushBlockers(el, findings);
         pushImage(el, findings);
-        for (let i = 0; i < this.#unreadable.length; i++) {
-            findings.push({
-                level: 'warn',
-                text: `unreadable sheet: ${this.#unreadable[i]}`,
-                score: 0
-            });
-        }
         const path = cssPath(el);
         this.core?.sendData('state', { source: this.source, key: 'css.target', value: path });
         this.core?.sendData('state', {
@@ -344,7 +340,7 @@ export class CSSAdapter {
         for (let i = 0; i < findings.length; i++) {
             const hit = findings[i];
             const text = hit.text || hit.kind || '';
-            if (!text) continue;
+            if (!text || text.startsWith('unreadable sheet:')) continue;
             if (!rememberIssue(this.#issueLog, `${path}\0${text}`, now, this.issueWindow)) continue;
             const level = hit.level === 'error' ? 'error' : 'warn';
             this.core?.sendData(level, {
@@ -355,34 +351,50 @@ export class CSSAdapter {
     }
 
     #stickFindings(el, path, findings) {
+        let changed = false;
         for (let i = 0; i < findings.length; i++) {
             const hit = findings[i];
-            if (!isStickyKind(hit.kind)) continue;
             if (hit.kind === 'overflows viewport' && !elementCausesOverflow(el)) continue;
-            this.#issues = pushStickyIssue(this.#issues, {
-                text: `${path} ${hit.kind}`,
-                el
-            }, this.maxIssues);
+            if (this.#rememberCause(el, path, hit.kind)) changed = true;
         }
-        this.#publishIssues();
+        if (changed) this.#publishIssues();
     }
 
-    #stickGroup(group) {
-        if (!isStickyKind(group.kind)) return;
-        const count = group.count > 1 ? ` ×${group.count}` : '';
-        this.#issues = pushStickyIssue(this.#issues, {
-            text: `${group.selector} ${group.kind}${count}`,
-            el: group.el
-        }, this.maxIssues);
-        this.#publishIssues();
+    #rememberCause(el, path, kind) {
+        const next = addCause(this.#issues, { kind, path, el }, this.maxIssues);
+        if (next === this.#issues) return false;
+        this.#issues = next;
+        return true;
+    }
+
+    #rememberSheet(href) {
+        const label = String(href || '');
+        if (!label || this.#seenSheets.has(label)) return;
+        this.#seenSheets.add(label);
+        this.#notes.push({ text: `unreadable sheet: ${label}` });
+        this.core?.sendData('log', {
+            source: this.source,
+            level: 'info',
+            message: `unreadable sheet: ${label}`
+        });
     }
 
     #publishIssues() {
-        this.core?.publishIssues(this.#issues.map((item) => ({
+        const bugs = this.#issues.map((entry) => ({
             level: 'error',
-            text: item.text,
-            onSelect: () => this.#pin(item.el)
-        })));
+            key: entry.key,
+            text: formatCause(entry),
+            targets: entry.targets.map((target) => ({
+                text: target.text,
+                onSelect: () => this.#pin(target.el)
+            }))
+        }));
+        const notes = this.#notes.map((note) => ({
+            level: 'info',
+            key: note.text,
+            text: note.text
+        }));
+        this.core?.publishIssues(bugs.concat(notes));
     }
 
     #pin(el) {
@@ -715,8 +727,57 @@ export function pushStickyIssue(list, entry, max = 10) {
     return next.slice(0, max);
 }
 
-function isStickyKind(kind) {
-    return kind === 'overflows viewport' || (typeof kind === 'string' && kind.startsWith('click blocked'));
+export function describeCause(kind, path) {
+    if (kind === 'overflows viewport') {
+        return { key: `overflow\0${path}`, type: 'overflow', cause: path };
+    }
+    const prefix = 'click blocked by ';
+    if (typeof kind === 'string' && kind.startsWith(prefix)) {
+        const cause = kind.slice(prefix.length);
+        return { key: `block\0${cause}`, type: 'block', cause };
+    }
+    return null;
+}
+
+/**
+ * One row per cause. A blocker that covers many nodes stays a single row.
+ * @param {Array<{ key: string, type: string, cause: string, targets: Array<{ text: string, el?: Element }> }>} list
+ * @param {{ kind?: string, path: string, el?: Element }} entry
+ */
+export function addCause(list, entry, max = 10) {
+    const described = describeCause(entry.kind, entry.path);
+    if (!described) return list;
+    const target = { text: entry.path, el: entry.el };
+    const rest = [];
+    let prev = null;
+    for (let i = 0; i < list.length; i++) {
+        if (list[i].key === described.key) prev = list[i];
+        else rest.push(list[i]);
+    }
+    const targets = prev ? prev.targets.filter((item) => !sameTarget(item, target)) : [];
+    targets.unshift(target);
+    rest.unshift({
+        key: described.key,
+        type: described.type,
+        cause: described.cause,
+        targets
+    });
+    return rest.slice(0, max);
+}
+
+export function formatCause(entry) {
+    const count = entry.targets.length;
+    if (entry.type === 'block') {
+        const noun = count === 1 ? 'element' : 'elements';
+        return `${entry.cause} blocks clicks on ${count} ${noun}`;
+    }
+    if (count <= 1) return `${entry.cause} overflows viewport`;
+    return `${entry.cause} overflows viewport · ${count} elements`;
+}
+
+function sameTarget(a, b) {
+    if (a.el && b.el) return a.el === b.el;
+    return a.text === b.text;
 }
 
 function elementCausesOverflow(el) {
