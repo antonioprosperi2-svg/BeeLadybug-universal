@@ -279,10 +279,12 @@ export class WebDOMAdapter {
 
         if (key !== this.#lastHoverKey) {
             this.#lastHoverKey = key;
-            this.core.sendData('log', {
-                source: this.source,
-                message: `hover ${key}  ${Math.round(model.border.w)}×${Math.round(model.border.h)}  ${model.display}`
-            });
+            if (!domNoiseQuiet(cssHuntEnabled(this.core), this.frozen, this.timeScale)) {
+                this.core.sendData('log', {
+                    source: this.source,
+                    message: `hover ${key}  ${Math.round(model.border.w)}×${Math.round(model.border.h)}  ${model.display}`
+                });
+            }
         }
     }
 
@@ -313,14 +315,17 @@ export class WebDOMAdapter {
         this.#mutRemoved = 0;
         this.#mutAttr = 0;
         if (!added && !removed && !attr) return;
+        const quiet = domNoiseQuiet(cssHuntEnabled(this.core), this.frozen, this.timeScale);
         const parts = [];
         if (added) parts.push(`+${added}`);
         if (removed) parts.push(`-${removed}`);
-        if (attr) parts.push(`attr ${attr}`);
-        this.core?.sendData('warn', {
-            source: this.source,
-            message: `mutate ${parts.join(' ')}`
-        });
+        if (attr && !quiet) parts.push(`attr ${attr}`);
+        if (parts.length) {
+            this.core?.sendData('warn', {
+                source: this.source,
+                message: `mutate ${parts.join(' ')}`
+            });
+        }
         this.core?.sendData('metric', {
             name: 'mutations',
             value: added + removed + attr,
@@ -503,4 +508,22 @@ function countElements(root) {
     if (!root) return 0;
     if (root.nodeType === 1) return 1 + (root.getElementsByTagName?.('*').length ?? 0);
     return root.getElementsByTagName?.('*').length ?? 0;
+}
+
+/**
+ * While CSS hunt is on, hover and attribute-mutation lines stay quiet
+ * unless F3 SLOW is running.
+ */
+export function domNoiseQuiet(cssEnabled, frozen, timeScale) {
+    if (!cssEnabled) return false;
+    return Boolean(frozen) || timeScale === 1;
+}
+
+function cssHuntEnabled(core) {
+    if (!core || typeof core.getAdapters !== 'function') return false;
+    const list = core.getAdapters();
+    for (let i = 0; i < list.length; i++) {
+        if (list[i].name === 'css' && list[i].enabled) return true;
+    }
+    return false;
 }

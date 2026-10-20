@@ -178,6 +178,7 @@ export class BeeLadybugCore {
     toggleAdapter(name: string): this;
     setAdapterEnabled(name: string, enabled: boolean): this;
     publishDetail(items: DetailItem[]): this;
+    publishIssues(items: DetailItem[]): this;
 }
 
 export interface DetailItem {
@@ -197,6 +198,7 @@ export class UIOverlay {
     onClear(channel?: string): void;
     render(): void;
     setDetail(items: DetailItem[]): this;
+    setIssues(items: DetailItem[]): this;
 }
 
 export interface CanvasEntity {
@@ -287,8 +289,11 @@ export interface CSSAdapterOptions {
     source?: string;
     hotkey?: string;
     scanKey?: string;
+    pinKey?: string;
     label?: string;
     maxScan?: number;
+    issueWindow?: number;
+    maxIssues?: number;
 }
 
 export const CSS_ADAPTER_DEFAULTS: Required<CSSAdapterOptions>;
@@ -298,8 +303,11 @@ export class CSSAdapter {
     source: string;
     hotkey: string;
     scanKey: string;
+    pinKey: string;
     label: string;
     maxScan: number;
+    issueWindow: number;
+    maxIssues: number;
     readonly active: boolean;
     constructor(core: BeeLadybugCore, options?: CSSAdapterOptions);
     attach(): this;

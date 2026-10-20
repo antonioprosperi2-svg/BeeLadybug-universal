@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { BeeLadybugCore, CSSAdapter } from '../src/index.js';
-import { formatIssue, groupIssues, keepOverflowCauses } from '../src/adapters/CSSAdapter.js';
+import { formatIssue, groupIssues, isDistortedImage, keepOverflowCauses, pushStickyIssue, rememberIssue } from '../src/adapters/CSSAdapter.js';
+import { domNoiseQuiet } from '../src/adapters/WebDOMAdapter.js';
 
 function makeCore() {
     return new BeeLadybugCore({
@@ -71,4 +72,43 @@ test('groupIssues conta i duplicati e ordina per gravità', () => {
         'img distorted image',
         'h1 !important h1 { color: red }'
     ]);
+});
+
+test('isDistortedImage confronta il file con il box disegnato, non con gli attributi', () => {
+    const naturalW = 800;
+    const naturalH = 600;
+    const renderedW = 640;
+    const renderedH = 300;
+    assert.equal(isDistortedImage(naturalW, naturalH, renderedW, renderedH, 'fill'), true);
+    assert.equal(isDistortedImage(naturalW, naturalH, renderedW, renderedH, ''), true);
+    assert.equal(isDistortedImage(naturalW, naturalH, naturalW, naturalH, 'fill'), false);
+    assert.equal(isDistortedImage(naturalW, naturalH, renderedW, renderedH, 'cover'), false);
+    assert.equal(isDistortedImage(naturalW, naturalH, 420, 300, 'fill'), false);
+    assert.equal(isDistortedImage(naturalW, naturalH, 421, 300, 'fill'), true);
+});
+
+test('rememberIssue scrive un problema per elemento solo ogni 5 secondi', () => {
+    const seen = new Map();
+    assert.equal(rememberIssue(seen, 'img.widget\0distorted image', 1000, 5000), true);
+    assert.equal(rememberIssue(seen, 'img.widget\0distorted image', 5999, 5000), false);
+    assert.equal(rememberIssue(seen, 'img.widget\0distorted image', 6000, 5000), true);
+    assert.equal(rememberIssue(seen, 'button\0click blocked by div', 1000, 5000), true);
+});
+
+test('pushStickyIssue tiene 10 avvisi, il più recente in cima', () => {
+    let list = [];
+    for (let i = 1; i <= 12; i++) list = pushStickyIssue(list, { text: `issue ${i}` }, 10);
+    assert.equal(list.length, 10);
+    assert.equal(list[0].text, 'issue 12');
+    assert.equal(list[9].text, 'issue 3');
+    list = pushStickyIssue(list, { text: 'issue 5' }, 10);
+    assert.equal(list[0].text, 'issue 5');
+    assert.equal(list.filter((item) => item.text === 'issue 5').length, 1);
+});
+
+test('domNoiseQuiet tace hover e mutate attr con F6 acceso, salvo F3 SLOW', () => {
+    assert.equal(domNoiseQuiet(true, false, 1), true);
+    assert.equal(domNoiseQuiet(true, true, 0.25), true);
+    assert.equal(domNoiseQuiet(true, false, 0.25), false);
+    assert.equal(domNoiseQuiet(false, false, 1), false);
 });

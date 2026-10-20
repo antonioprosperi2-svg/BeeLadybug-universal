@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.2
+
+- Distorted images compare the file ratio with the rendered box from `getBoundingClientRect`, only when computed `object-fit` is `fill`.
+- While CSS hunt is on, DOM hover and attribute-mutation lines stay out of the event list unless F3 SLOW is on. Each CSS issue is logged once per element every 5 seconds.
+- `P` pins the inspector on the current element. Click-blocked and overflow causes stay in an Issues list (max 10, newest first) that does not scroll with the console.
+
 ## 0.5.1
 
 - CSS scan keeps the element that causes a viewport overflow. Ancestors that only echo a descendant (±2px), or whose own width fits, are skipped.

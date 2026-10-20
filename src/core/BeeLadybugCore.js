@@ -9,7 +9,7 @@
 import { UIOverlay } from './UIOverlay.js';
 import { buildAssistantSnapshot, normalizeAssistant } from './AiAssistant.js';
 
-export const BEE_LADYBUG_VERSION = '0.5.1';
+export const BEE_LADYBUG_VERSION = '0.5.2';
 
 export const CORE_DEFAULTS = Object.freeze({
     toggleKey: 'F2',
@@ -99,6 +99,7 @@ export class BeeLadybugCore {
         this.#askBusy = false;
         this.#adapters = new Map();
         this.#detail = [];
+        this.#issues = [];
 
         this.ui = null;
         if (cfg.ui !== false && typeof document !== 'undefined') {
@@ -135,6 +136,8 @@ export class BeeLadybugCore {
     #askBusy;
     /** @type {Array<{ text: string, level?: string, onSelect?: () => void }>} */
     #detail;
+    /** @type {Array<{ text: string, level?: string, onSelect?: () => void }>} */
+    #issues;
     /** @type {Map<string, { name: string, label: string, enabled: boolean, enable: Function, disable: Function }>} */
     #adapters;
 
@@ -357,6 +360,17 @@ export class BeeLadybugCore {
     }
 
     /**
+     * Sticky red warnings. The core does not interpret them.
+     * @param {Array<{ text: string, level?: string, onSelect?: () => void }>} items
+     */
+    publishIssues(items) {
+        const list = Array.isArray(items) ? items.slice(0, 10) : [];
+        this.#issues = list;
+        this.ui?.setIssues(this.#issues);
+        return this;
+    }
+
+    /**
      * @param {string} name
      */
     toggleAdapter(name) {
@@ -463,6 +477,7 @@ export class BeeLadybugCore {
         this.#askBusy = false;
         this.#adapters.clear();
         this.#detail = [];
+        this.#issues = [];
         this.ui?.destroy();
         this.ui = null;
         return this;

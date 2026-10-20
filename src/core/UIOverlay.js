@@ -263,6 +263,35 @@ const STYLES = `
 .bl-hotkeys:empty {
   display: none;
 }
+.bl-issues {
+  overflow: hidden;
+  background: #07080c;
+  border-top: 1px solid rgba(255, 59, 78, 0.55);
+}
+.bl-issues[hidden] {
+  display: none;
+}
+.bl-issues-label {
+  padding: 5px 10px 0;
+  color: #ff3b4e;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+}
+.bl-issues button {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 3px 10px;
+  border: 0;
+  background: transparent;
+  color: #ff6b7d;
+  font: 11px ui-monospace, Consolas, monospace;
+  line-height: 1.4;
+  text-align: left;
+  cursor: pointer;
+}
+.bl-issues button:hover { background: rgba(255, 59, 78, 0.08); }
 .bl-detail {
   max-height: 132px;
   overflow: auto;
@@ -366,6 +395,7 @@ export class UIOverlay {
         this.#adapterSig = '';
         this.#hotkeySig = '';
         this.#detail = [];
+        this.#issues = [];
         this.#flashAt = new Map();
         this.#flashTimers = new Map();
     }
@@ -380,6 +410,7 @@ export class UIOverlay {
     #adapterSig;
     #hotkeySig;
     #detail;
+    #issues;
     #flashAt;
     #flashTimers;
 
@@ -430,6 +461,10 @@ export class UIOverlay {
                   </div>
                 </div>
                 <div class="bl-hud" data-el="hud"></div>
+                <div class="bl-issues" data-el="issues" hidden>
+                  <div class="bl-issues-label">ISSUES</div>
+                  <div data-el="issues-list"></div>
+                </div>
                 <div class="bl-detail" data-el="detail" hidden></div>
                 <div class="bl-console" data-el="console" role="log" aria-live="polite"></div>
                 <div class="bl-foot">
@@ -459,6 +494,8 @@ export class UIOverlay {
             hud: this.#root.querySelector('[data-el="hud"]'),
             console: this.#root.querySelector('[data-el="console"]'),
             detail: this.#root.querySelector('[data-el="detail"]'),
+            issues: this.#root.querySelector('[data-el="issues"]'),
+            issuesList: this.#root.querySelector('[data-el="issues-list"]'),
             providers: this.#root.querySelector('[data-el="providers"]'),
             adapters: this.#root.querySelector('[data-el="adapters"]'),
             hotkeys: this.#root.querySelector('[data-el="hotkeys"]')
@@ -474,6 +511,13 @@ export class UIOverlay {
             else if (act === 'ask') this.core.ask();
             else if (act === 'assist') this.core.setActiveAssistant(btn.getAttribute('data-name'));
             else if (act === 'adapter') this.core.toggleAdapter(btn.getAttribute('data-name'));
+        });
+
+        this.#root.querySelector('.bl-issues')?.addEventListener('click', (event) => {
+            const row = event.target.closest('[data-issue]');
+            if (!row) return;
+            const item = this.#issues[Number(row.getAttribute('data-issue'))];
+            if (item && typeof item.onSelect === 'function') item.onSelect();
         });
 
         this.#root.querySelector('.bl-detail')?.addEventListener('click', (event) => {
@@ -506,6 +550,7 @@ export class UIOverlay {
         this.#adapterSig = '';
         this.#hotkeySig = '';
         this.#detail = [];
+        this.#issues = [];
         this.#clearFlashTimers();
         this.#flashAt.clear();
         return this;
@@ -543,6 +588,29 @@ export class UIOverlay {
         }
         box.hidden = false;
         box.innerHTML = html;
+        return this;
+    }
+
+    /**
+     * Red warnings pinned above the scrolling console. Newest first.
+     * @param {Array<{ text: string, level?: string, onSelect?: () => void }>} items
+     */
+    setIssues(items) {
+        if (!this.#els?.issues || !this.#els.issuesList) return this;
+        const list = Array.isArray(items) ? items.slice(0, 10) : [];
+        this.#issues = list;
+        const box = this.#els.issues;
+        if (!list.length) {
+            this.#els.issuesList.innerHTML = '';
+            box.hidden = true;
+            return this;
+        }
+        let html = '';
+        for (let i = 0; i < list.length; i++) {
+            html += `<button type="button" data-issue="${i}">${escapeHtml(list[i].text)}</button>`;
+        }
+        box.hidden = false;
+        this.#els.issuesList.innerHTML = html;
         return this;
     }
 

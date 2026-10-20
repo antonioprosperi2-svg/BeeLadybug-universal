@@ -15,8 +15,11 @@ export const CSS_ADAPTER_DEFAULTS = Object.freeze({
     source: 'css',
     hotkey: 'F6',
     scanKey: 'KeyS',
+    pinKey: 'KeyP',
     label: 'F6 CSS',
-    maxScan: 8
+    maxScan: 8,
+    issueWindow: 5000,
+    maxIssues: 10
 });
 
 export class CSSAdapter {
@@ -30,8 +33,11 @@ export class CSSAdapter {
         this.source = cfg.source;
         this.hotkey = cfg.hotkey;
         this.scanKey = cfg.scanKey;
+        this.pinKey = cfg.pinKey;
         this.label = cfg.label;
         this.maxScan = cfg.maxScan;
+        this.issueWindow = cfg.issueWindow;
+        this.maxIssues = cfg.maxIssues;
 
         this.#attached = false;
         this.#active = false;
@@ -43,6 +49,9 @@ export class CSSAdapter {
         this.#rafId = 0;
         this.#lastEl = null;
         this.#pinned = null;
+        this.#panelLock = false;
+        this.#issues = [];
+        this.#issueLog = new Map();
         this.#hoverBox = null;
         this.#pinBox = null;
         this.#observer = null;
@@ -70,6 +79,9 @@ export class CSSAdapter {
     #rafId;
     #lastEl;
     #pinned;
+    #panelLock;
+    #issues;
+    #issueLog;
     #hoverBox;
     #pinBox;
     #observer;
@@ -94,7 +106,7 @@ export class CSSAdapter {
         });
         this.core?.sendData('log', {
             source: this.source,
-            message: 'CSSAdapter attached. F6 CSS hunt. S scans the page while hunt is on.'
+            message: 'CSSAdapter attached. F6 CSS hunt. S scans. P pins the panel.'
         });
         this.core?.sendData('state', {
             source: this.source,
@@ -146,8 +158,10 @@ export class CSSAdapter {
                 score: cause.score
             });
         }
-        const groups = groupIssues(rows).slice(0, this.maxScan);
-        const items = groups.map((group) => ({
+        const groups = groupIssues(rows);
+        for (let i = groups.length - 1; i >= 0; i--) this.#stickGroup(groups[i]);
+        const shown = groups.slice(0, this.maxScan);
+        const items = shown.map((group) => ({
             level: group.level,
             text: formatIssue(group),
             onSelect: () => this.#pin(group.el)
@@ -157,13 +171,13 @@ export class CSSAdapter {
         this.core?.sendData('state', {
             source: this.source,
             key: 'css.scan',
-            value: String(groups.length)
+            value: String(shown.length)
         });
-        if (groups.length || isVerbose(this.core)) {
+        if (shown.length || isVerbose(this.core)) {
             this.core?.sendData('warn', {
                 source: this.source,
-                message: groups.length
-                    ? `scan ${groups.length} issue(s). Click a row to outline it.`
+                message: shown.length
+                    ? `scan ${shown.length} issue(s). Click a row to outline it.`
                     : 'scan clean: no causes found.'
             });
         }
@@ -193,7 +207,7 @@ export class CSSAdapter {
         this.core?.sendData('state', { source: this.source, key: 'css.hunt', value: 'on' });
         this.core?.sendData('log', {
             source: this.source,
-            message: 'CSS hunt on. Hover an element, or press S to scan.'
+            message: 'CSS hunt on. Hover an element, P pins the panel, S scans.'
         });
     }
 
@@ -212,17 +226,27 @@ export class CSSAdapter {
         this.#observer = null;
         this.#lastEl = null;
         this.#pinned = null;
+        this.#panelLock = false;
+        this.#issues = [];
+        this.#issueLog.clear();
         this.#unmountBoxes();
         this.core?.publishDetail([]);
+        this.core?.publishIssues([]);
         this.core?.sendData('state', { source: this.source, key: 'css.hunt', value: 'off' });
         this.core?.sendData('log', { source: this.source, message: 'CSS hunt off.' });
     }
 
     #handleKey(event) {
         if (!this.#active || event.repeat) return;
-        if (event.code !== this.scanKey) return;
         if (isTypingTarget(event.target)) return;
+        if (event.code === this.pinKey) {
+            event.preventDefault();
+            this.#togglePanelPin();
+            return;
+        }
+        if (event.code !== this.scanKey) return;
         event.preventDefault();
+        this.#panelLock = false;
         this.scan();
     }
 
@@ -252,6 +276,7 @@ export class CSSAdapter {
     #inspect(x, y) {
         const el = pickElement(x, y);
         placeBox(this.#hoverBox, el);
+        if (this.#panelLock) return;
         if (el === this.#lastEl) return;
         this.#lastEl = el;
         if (!el) {
@@ -284,17 +309,80 @@ export class CSSAdapter {
             text: `${path}  ${hit.text}`,
             onSelect: () => this.#pin(el)
         })));
+        this.#stickFindings(el, path, findings);
         if (!findings.length) {
             if (isVerbose(this.core)) {
                 this.core?.sendData('log', { source: this.source, message: `${path}  clean` });
             }
             return;
         }
-        const lead = findings.find((hit) => hit.level === 'error') || findings[0];
-        this.core?.sendData(lead.level === 'error' ? 'error' : 'warn', {
-            source: this.source,
-            message: `${path}  ${lead.text}`
-        });
+        this.#logFindings(path, findings);
+    }
+
+    #togglePanelPin() {
+        if (this.#panelLock) {
+            this.#panelLock = false;
+            this.#pinned = null;
+            placeBox(this.#pinBox, null);
+            this.core?.sendData('state', { source: this.source, key: 'css.pin', value: 'off' });
+            this.core?.sendData('log', { source: this.source, message: 'CSS pin off.' });
+            this.#lastEl = null;
+            this.#schedule();
+            return;
+        }
+        const el = this.#lastEl;
+        if (!el) return;
+        this.#panelLock = true;
+        this.#pin(el);
+        const path = cssPath(el);
+        this.core?.sendData('state', { source: this.source, key: 'css.pin', value: path });
+        this.core?.sendData('log', { source: this.source, message: `CSS pin ${path}` });
+    }
+
+    #logFindings(path, findings) {
+        const now = nowMs();
+        for (let i = 0; i < findings.length; i++) {
+            const hit = findings[i];
+            const text = hit.text || hit.kind || '';
+            if (!text) continue;
+            if (!rememberIssue(this.#issueLog, `${path}\0${text}`, now, this.issueWindow)) continue;
+            const level = hit.level === 'error' ? 'error' : 'warn';
+            this.core?.sendData(level, {
+                source: this.source,
+                message: `${path}  ${text}`
+            });
+        }
+    }
+
+    #stickFindings(el, path, findings) {
+        for (let i = 0; i < findings.length; i++) {
+            const hit = findings[i];
+            if (!isStickyKind(hit.kind)) continue;
+            if (hit.kind === 'overflows viewport' && !elementCausesOverflow(el)) continue;
+            this.#issues = pushStickyIssue(this.#issues, {
+                text: `${path} ${hit.kind}`,
+                el
+            }, this.maxIssues);
+        }
+        this.#publishIssues();
+    }
+
+    #stickGroup(group) {
+        if (!isStickyKind(group.kind)) return;
+        const count = group.count > 1 ? ` ×${group.count}` : '';
+        this.#issues = pushStickyIssue(this.#issues, {
+            text: `${group.selector} ${group.kind}${count}`,
+            el: group.el
+        }, this.maxIssues);
+        this.#publishIssues();
+    }
+
+    #publishIssues() {
+        this.core?.publishIssues(this.#issues.map((item) => ({
+            level: 'error',
+            text: item.text,
+            onSelect: () => this.#pin(item.el)
+        })));
     }
 
     #pin(el) {
@@ -568,21 +656,89 @@ function pushImage(el, findings) {
     if (!el || el.tagName !== 'IMG') return;
     const naturalW = el.naturalWidth;
     const naturalH = el.naturalHeight;
-    const shownW = el.clientWidth;
-    const shownH = el.clientHeight;
-    if (!naturalW || !naturalH || !shownW || !shownH) return;
-    const natural = naturalW / naturalH;
-    const shown = shownW / shownH;
-    const diff = Math.abs(natural - shown) / natural;
-    const fit = getComputedStyle(el).objectFit;
-    if (diff <= 0.05 || fit !== 'fill') return;
+    if (!naturalW || !naturalH || typeof el.getBoundingClientRect !== 'function') return;
+    const rect = el.getBoundingClientRect();
+    const fit = (typeof getComputedStyle === 'function' ? getComputedStyle(el).objectFit : '') || 'fill';
+    if (!isDistortedImage(naturalW, naturalH, rect.width, rect.height, fit)) return;
+    const gap = renderedRatioGap(naturalW, naturalH, rect.width, rect.height);
     findings.push({
         level: 'error',
         rank: ISSUE_RANK.image,
-        score: diff * 100,
+        score: gap * 100,
         kind: 'distorted image',
-        text: `distorted image ${Math.round(diff * 100)}% (object-fit: fill)`
+        text: `distorted image ${Math.round(gap * 100)}% (object-fit: fill)`
     });
+}
+
+/**
+ * Rendered box versus the file. Attributes and clientWidth are ignored.
+ * `object-fit` defaults to fill. Flag when the ratios differ by more than 5%.
+ */
+export function isDistortedImage(naturalW, naturalH, renderedW, renderedH, objectFit) {
+    const fit = objectFit || 'fill';
+    if (fit !== 'fill') return false;
+    return renderedRatioGap(naturalW, naturalH, renderedW, renderedH) > 0.05;
+}
+
+export function renderedRatioGap(naturalW, naturalH, renderedW, renderedH) {
+    if (!naturalW || !naturalH || !renderedW || !renderedH) return 0;
+    const natural = naturalW / naturalH;
+    const rendered = renderedW / renderedH;
+    return Math.abs(natural - rendered) / natural;
+}
+
+/** @returns {boolean} true when this issue should be written to the event list */
+export function rememberIssue(seen, key, now, windowMs = 5000) {
+    const prev = seen.get(key);
+    if (typeof prev === 'number' && now - prev < windowMs) return false;
+    seen.set(key, now);
+    if (seen.size > 64) {
+        for (const [name, at] of seen) {
+            if (now - at >= windowMs) seen.delete(name);
+        }
+    }
+    return true;
+}
+
+/**
+ * Newest first, duplicates move to the top, capped at `max`.
+ * @param {Array<{ text: string, el?: Element }>} list
+ * @param {{ text: string, el?: Element }} entry
+ */
+export function pushStickyIssue(list, entry, max = 10) {
+    const next = [entry];
+    for (let i = 0; i < list.length; i++) {
+        if (list[i].text === entry.text) continue;
+        next.push(list[i]);
+        if (next.length >= max) break;
+    }
+    return next.slice(0, max);
+}
+
+function isStickyKind(kind) {
+    return kind === 'overflows viewport' || (typeof kind === 'string' && kind.startsWith('click blocked'));
+}
+
+function elementCausesOverflow(el) {
+    const self = measureViewportOverflow(el);
+    if (!self) return false;
+    const items = [self];
+    if (typeof el.querySelectorAll === 'function') {
+        const nodes = el.querySelectorAll('*');
+        for (let i = 0; i < nodes.length; i++) {
+            const measured = measureViewportOverflow(nodes[i]);
+            if (measured) items.push(measured);
+        }
+    }
+    const causes = keepOverflowCauses(items);
+    for (let i = 0; i < causes.length; i++) {
+        if (causes[i].el === el) return true;
+    }
+    return false;
+}
+
+function nowMs() {
+    return typeof performance !== 'undefined' ? performance.now() : Date.now();
 }
 
 function issue(kind, rank, score) {

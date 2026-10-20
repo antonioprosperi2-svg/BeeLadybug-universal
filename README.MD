@@ -134,6 +134,7 @@ bee.subscribe((packet) => {
 | `F3` | slow-motion del tempo fittizio (`0.25x` / `1x`) |
 | `F4` | freeze / run del tempo fittizio |
 | `F6` | CSS hunt, se `CSSAdapter` è attaccato |
+| `P` | blocca il pannello CSS sull'elemento corrente, solo con la hunt accesa |
 | `S` | scansione CSS, solo con la hunt accesa |
 
 Niente `F12`, niente tilde: sui layout italiani la tilde non è un tasto unico.
@@ -198,9 +199,9 @@ css.attach();
 - overflow del viewport e margini negativi
 - testo trasparente, `opacity: 0`, o colore uguale allo sfondo
 - chi intercetta il click al centro, inclusi `::before` / `::after` fissi su `html` / `body`
-- `<img>` con rapporto stirato oltre il 5% e `object-fit: fill`
+- `<img>` con rapporto del file diverso di oltre il 5% dal riquadro disegnato (`getBoundingClientRect`), solo se `object-fit` calcolato è `fill` (il default)
 
-`S` con la hunt accesa percorre la pagina. L'overflow resta solo sull'elemento che lo causa: un antenato si salta se un discendente sfora della stessa quantità (±2px), oppure se la larghezza del box ci sta nel viewport e a uscire è un figlio. Righe uguali (stesso selettore e stesso problema) diventano una sola, con il conteggio (`article overflows viewport ×4`). L'ordine è: causa di overflow, click bloccato, testo invisibile, immagine distorta, `!important`. Un click sulla riga disegna il contorno rosso. In console un elemento pulito non viene scritto, a meno che `F3` SLOW sia acceso. I fogli di stile restano in cache finché un `MutationObserver` non vede un cambio a `<style>` o `<link>`. Hover è limitato a un frame.
+`S` con la hunt accesa percorre la pagina. L'overflow resta solo sull'elemento che lo causa: un antenato si salta se un discendente sfora della stessa quantità (±2px), oppure se la larghezza del box ci sta nel viewport e a uscire è un figlio. Righe uguali (stesso selettore e stesso problema) diventano una sola, con il conteggio (`article overflows viewport ×4`). L'ordine è: causa di overflow, click bloccato, testo invisibile, immagine distorta, `!important`. Un click sulla riga disegna il contorno rosso. `P` ferma il pannello sull'elemento corrente, così si può leggere. In cima all'overlay, la lista **Issues** tiene gli avvisi rossi (click bloccato e causa di overflow): al massimo 10, il più recente in alto, e non scorre via con la console. In console un elemento pulito non viene scritto, e con la hunt accesa restano fuori anche `hover` e `mutate attr` del DOM, a meno che `F3` SLOW sia acceso. Ogni problema CSS viene scritto una sola volta per elemento ogni 5 secondi. I fogli di stile restano in cache finché un `MutationObserver` non vede un cambio a `<style>` o `<link>`. Hover è limitato a un frame.
 
 Demo: `examples/css-hunt.html`.
 

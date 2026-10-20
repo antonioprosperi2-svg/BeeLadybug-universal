@@ -87,6 +87,15 @@
             object-fit: fill;
             background: #1e1e24;
         }
+        .widget-image {
+            width: 640px;
+            max-width: 100%;
+        }
+        .widget-img {
+            display: block;
+            width: 100%;
+            height: 300px !important;
+        }
         .mobile-heading {
             margin: 0;
             font-size: 1.4rem;
@@ -139,10 +148,9 @@
     <main>
         <h1>CSS hunt</h1>
         <p class="lede">
-            Cinque bug messi apposta. Premi <kbd>F6</kbd> (o il pulsante
-            <code>F6 CSS</code> accanto a F3/F4), passa il mouse sui riquadri,
-            poi <kbd>S</kbd> per la scansione. Un click sulla riga nell'overlay
-            disegna il contorno rosso.
+            Sei bug messi apposta. Premi <kbd>F6</kbd>
+            (o il pulsante <code>F6 CSS</code> accanto a F3/F4), passa il mouse sui riquadri,
+            <kbd>P</kbd> per fermare il pannello e leggerlo, poi <kbd>S</kbd> per la scansione.
         </p>
         <div class="row">
             <button id="scan" type="button">Scan page</button>
@@ -176,9 +184,16 @@
                 <p>In viewport stretta (o normale da laptop) il titolo ha lo stesso colore dello sfondo.</p>
                 <h3 class="mobile-heading">Solo mobile</h3>
             </article>
+            <article>
+                <h2>6. Widget immagine</h2>
+                <p>Come un widget Elementor: il file è 800×600 e gli attributi restano quelli. La colonna dà la larghezza, <code>height: 300px !important</code>, <code>object-fit</code> è il default <code>fill</code>.</p>
+                <div class="widget-image">
+                    <img class="widget-img" width="800" height="600" alt="Foto widget" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='800' height='600'%3E%3Crect width='800' height='600' fill='%233498db'/%3E%3Ccircle cx='400' cy='300' r='140' fill='%23ffd36a'/%3E%3C/svg%3E">
+                </div>
+            </article>
         </div>
         <p class="hint">
-            <kbd>F6</kbd> hunt · <kbd>S</kbd> scan · <kbd>F2</kbd> overlay.
+            <kbd>F6</kbd> hunt · <kbd>P</kbd> pin · <kbd>S</kbd> scan · <kbd>F2</kbd> overlay.
             <a href="../index.html">Canvas</a> ·
             <a href="./dom.html">DOM</a> ·
             <a href="./core.html">Core</a>
