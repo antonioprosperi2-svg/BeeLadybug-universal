@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { BeeLadybugCore, CSSAdapter } from '../src/index.js';
-import { addCause, describeCause, formatCause, formatIssue, groupIssues, isDistortedImage, keepOverflowCauses, pushStickyIssue, rememberIssue } from '../src/adapters/CSSAdapter.js';
+import { addCause, describeCause, formatCause, formatIssue, groupIssues, isDistortedImage, keepOverflowCauses, pushStickyIssue, rememberIssue, stackingReasons } from '../src/adapters/CSSAdapter.js';
 import { domNoiseQuiet } from '../src/adapters/WebDOMAdapter.js';
 
 function makeCore() {
@@ -126,4 +126,58 @@ test('addCause raggruppa un blocco click in una sola riga', () => {
     assert.equal(formatCause(list[0]), 'body::after blocks clicks on 10 elements');
     assert.equal(list[0].targets.length, 10);
     assert.equal(describeCause('unreadable sheet: https://cdn.example/a.css', 'button'), null);
+});
+
+test('stackingReasons riconosce transform, opacity, filter, z-index e will-change', () => {
+    assert.deepEqual(stackingReasons({
+        transform: 'matrix(1, 0, 0, 1, 0, 0)',
+        opacity: '1',
+        filter: 'none',
+        position: 'static',
+        zIndex: 'auto',
+        willChange: 'auto'
+    }), { bugs: ['transform'], hint: '' });
+    assert.deepEqual(stackingReasons({
+        transform: 'none',
+        opacity: '0.4',
+        filter: 'blur(2px)',
+        position: 'relative',
+        zIndex: '2',
+        willChange: 'transform, opacity'
+    }), { bugs: ['opacity', 'filter', 'z-index'], hint: 'transform, opacity' });
+    assert.deepEqual(stackingReasons({
+        transform: 'none',
+        opacity: '1',
+        filter: 'none',
+        position: 'static',
+        zIndex: '3',
+        willChange: 'scroll-position'
+    }), { bugs: [], hint: '' });
+});
+
+test('formatCause raggruppa i figli chiusi in uno stacking context', () => {
+    let list = [];
+    for (const name of ['span.b1', 'span.b2', 'span.b3']) {
+        list = addCause(list, {
+            kind: 'stacking context (transform) by div.hero',
+            path: name,
+            el: { id: name }
+        }, 10);
+    }
+    assert.equal(list.length, 1);
+    assert.equal(list[0].level, 'error');
+    assert.equal(
+        formatCause(list[0]),
+        'div.hero creates stacking context (transform) - z-index of 3 children is trapped'
+    );
+    const hint = addCause([], {
+        kind: 'will-change opacity by div.layer-hint',
+        path: 'span.floater',
+        el: { id: 'floater' }
+    }, 10);
+    assert.equal(hint[0].level, 'info');
+    assert.equal(
+        formatCause(hint[0]),
+        'div.layer-hint will-change: opacity — z-index of 1 child stays in this layer'
+    );
 });

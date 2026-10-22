@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.4
+
+- CSS hunt walks ancestors and groups stacking contexts by cause, for example `div.hero creates stacking context (transform) - z-index of 3 children is trapped`. Idea from Rishabh Mishra.
+- `will-change: transform` or `opacity` is a grey info hint with a z-index note on the same line, not a red bug.
+
 ## 0.5.3
 
 - Issues group by cause: one red line such as `body::after blocks clicks on 10 elements`, expanded on click.

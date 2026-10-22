@@ -358,6 +358,7 @@ const STYLES = `
 }
 .bl-detail button[data-level="warn"] { color: #ffd36a; }
 .bl-detail button[data-level="error"] { color: #ff6b7d; }
+.bl-detail button[data-level="info"] { color: #8b91a3; }
 .bl-detail button:hover { background: rgba(255, 255, 255, 0.04); }
 .bl-adapter {
   appearance: none;

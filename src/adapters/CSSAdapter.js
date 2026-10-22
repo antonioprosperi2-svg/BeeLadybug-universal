@@ -143,6 +143,7 @@ export class CSSAdapter {
             pushInvisible(el, findings);
             pushBlockers(el, findings);
             pushImage(el, findings);
+            pushStacking(el, findings);
             pushImportant(el, this.#rules, findings);
             for (let j = 0; j < findings.length; j++) {
                 rows.push({ el, selector: cssPath(el), ...findings[j] });
@@ -293,6 +294,7 @@ export class CSSAdapter {
         pushInvisible(el, findings);
         pushBlockers(el, findings);
         pushImage(el, findings);
+        pushStacking(el, findings);
         const path = cssPath(el);
         this.core?.sendData('state', { source: this.source, key: 'css.target', value: path });
         this.core?.sendData('state', {
@@ -340,7 +342,7 @@ export class CSSAdapter {
         for (let i = 0; i < findings.length; i++) {
             const hit = findings[i];
             const text = hit.text || hit.kind || '';
-            if (!text || text.startsWith('unreadable sheet:')) continue;
+            if (!text || text.startsWith('unreadable sheet:') || hit.level === 'info') continue;
             if (!rememberIssue(this.#issueLog, `${path}\0${text}`, now, this.issueWindow)) continue;
             const level = hit.level === 'error' ? 'error' : 'warn';
             this.core?.sendData(level, {
@@ -380,20 +382,25 @@ export class CSSAdapter {
     }
 
     #publishIssues() {
-        const bugs = this.#issues.map((entry) => ({
-            level: 'error',
-            key: entry.key,
-            text: formatCause(entry),
-            targets: entry.targets.map((target) => ({
-                text: target.text,
-                onSelect: () => this.#pin(target.el)
-            }))
-        }));
+        const bugs = [];
         const notes = this.#notes.map((note) => ({
             level: 'info',
             key: note.text,
             text: note.text
         }));
+        for (let i = 0; i < this.#issues.length; i++) {
+            const entry = this.#issues[i];
+            const item = {
+                key: entry.key,
+                text: formatCause(entry),
+                targets: entry.targets.map((target) => ({
+                    text: target.text,
+                    onSelect: () => this.#pin(target.el)
+                }))
+            };
+            if (entry.level === 'info') notes.push({ ...item, level: 'info' });
+            else bugs.push({ ...item, level: 'error' });
+        }
         this.core?.publishIssues(bugs.concat(notes));
     }
 
@@ -598,9 +605,11 @@ function pushNegativeMargins(el, findings) {
 const ISSUE_RANK = Object.freeze({
     overflow: 0,
     blocker: 1,
+    stack: 1,
     invisible: 2,
     image: 3,
-    important: 4
+    important: 4,
+    hint: 6
 });
 
 /**
@@ -729,12 +738,32 @@ export function pushStickyIssue(list, entry, max = 10) {
 
 export function describeCause(kind, path) {
     if (kind === 'overflows viewport') {
-        return { key: `overflow\0${path}`, type: 'overflow', cause: path };
+        return { key: `overflow\0${path}`, type: 'overflow', cause: path, reason: '', level: 'error' };
     }
     const prefix = 'click blocked by ';
     if (typeof kind === 'string' && kind.startsWith(prefix)) {
         const cause = kind.slice(prefix.length);
-        return { key: `block\0${cause}`, type: 'block', cause };
+        return { key: `block\0${cause}`, type: 'block', cause, reason: '', level: 'error' };
+    }
+    const stack = typeof kind === 'string' ? kind.match(/^stacking context \(([^)]+)\) by (.+)$/) : null;
+    if (stack) {
+        return {
+            key: `stack\0${stack[2]}\0${stack[1]}`,
+            type: 'stack',
+            cause: stack[2],
+            reason: stack[1],
+            level: 'error'
+        };
+    }
+    const hint = typeof kind === 'string' ? kind.match(/^will-change (.+?) by (.+)$/) : null;
+    if (hint) {
+        return {
+            key: `will\0${hint[2]}\0${hint[1]}`,
+            type: 'stack-hint',
+            cause: hint[2],
+            reason: hint[1],
+            level: 'info'
+        };
     }
     return null;
 }
@@ -760,6 +789,8 @@ export function addCause(list, entry, max = 10) {
         key: described.key,
         type: described.type,
         cause: described.cause,
+        reason: described.reason || '',
+        level: described.level || 'error',
         targets
     });
     return rest.slice(0, max);
@@ -771,8 +802,94 @@ export function formatCause(entry) {
         const noun = count === 1 ? 'element' : 'elements';
         return `${entry.cause} blocks clicks on ${count} ${noun}`;
     }
+    if (entry.type === 'stack') {
+        const noun = count === 1 ? 'child' : 'children';
+        return `${entry.cause} creates stacking context (${entry.reason}) - z-index of ${count} ${noun} is trapped`;
+    }
+    if (entry.type === 'stack-hint') {
+        const noun = count === 1 ? 'child' : 'children';
+        return `${entry.cause} will-change: ${entry.reason} — z-index of ${count} ${noun} stays in this layer`;
+    }
     if (count <= 1) return `${entry.cause} overflows viewport`;
     return `${entry.cause} overflows viewport · ${count} elements`;
+}
+
+/**
+ * Properties that create a stacking context. `will-change` for transform or
+ * opacity is only a hint: it may promote a layer, it is not reported as a bug.
+ * @param {{ transform?: string, opacity?: string, filter?: string, position?: string, zIndex?: string, willChange?: string, getPropertyValue?: (name: string) => string }} style
+ */
+export function stackingReasons(style) {
+    const read = (prop, camel) => {
+        if (style && typeof style.getPropertyValue === 'function') {
+            const raw = style.getPropertyValue(prop);
+            if (raw) return String(raw).trim();
+        }
+        if (style && style[camel] != null && style[camel] !== '') return String(style[camel]).trim();
+        return '';
+    };
+    const bugs = [];
+    const transform = read('transform', 'transform');
+    if (transform && transform !== 'none') bugs.push('transform');
+    const opacity = parseFloat(read('opacity', 'opacity'));
+    if (Number.isFinite(opacity) && opacity < 1) bugs.push('opacity');
+    const filter = read('filter', 'filter');
+    if (filter && filter !== 'none') bugs.push('filter');
+    const position = read('position', 'position') || 'static';
+    const zIndex = read('z-index', 'zIndex') || 'auto';
+    if (position !== 'static' && zIndex !== 'auto') bugs.push('z-index');
+    const hint = willChangeHint(read('will-change', 'willChange'));
+    return { bugs, hint };
+}
+
+function willChangeHint(value) {
+    if (!value || value === 'auto') return '';
+    const parts = value.split(',').map((part) => part.trim().toLowerCase());
+    const hit = [];
+    for (let i = 0; i < parts.length; i++) {
+        if ((parts[i] === 'transform' || parts[i] === 'opacity') && !hit.includes(parts[i])) hit.push(parts[i]);
+    }
+    return hit.join(', ');
+}
+
+function pushStacking(el, findings) {
+    if (!el || typeof getComputedStyle !== 'function' || !el.parentElement) return;
+    const own = getComputedStyle(el);
+    const ownZ = own.zIndex || own.getPropertyValue?.('z-index') || 'auto';
+    if (!ownZ || ownZ === 'auto') return;
+    let node = el.parentElement;
+    while (node && node.nodeType === 1) {
+        if (isBeeChrome(node)) return;
+        const found = stackingReasons(getComputedStyle(node));
+        const ancestor = cssPath(node);
+        if (found.bugs.length) {
+            const reason = found.bugs[0];
+            findings.push({
+                level: 'error',
+                rank: ISSUE_RANK.stack,
+                score: 35,
+                kind: `stacking context (${reason}) by ${ancestor}`,
+                text: `z-index trapped by ${ancestor} (${reason})`
+            });
+            if (found.hint) findings.push(stackHint(ancestor, found.hint));
+            return;
+        }
+        if (found.hint) {
+            findings.push(stackHint(ancestor, found.hint));
+            return;
+        }
+        node = node.parentElement;
+    }
+}
+
+function stackHint(ancestor, hint) {
+    return {
+        level: 'info',
+        rank: ISSUE_RANK.hint,
+        score: 1,
+        kind: `will-change ${hint} by ${ancestor}`,
+        text: `will-change: ${hint} on ${ancestor}`
+    };
 }
 
 function sameTarget(a, b) {

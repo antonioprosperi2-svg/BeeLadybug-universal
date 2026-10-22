@@ -96,6 +96,37 @@
             width: 100%;
             height: 300px !important;
         }
+        .hero {
+            position: relative;
+            transform: translateZ(0);
+            height: 96px;
+            background: #1e1e24;
+            border: 1px solid #57606f;
+        }
+        .hero span {
+            position: absolute;
+            padding: 4px 8px;
+            background: #ff4757;
+            color: #fff;
+            font: 700 12px system-ui, sans-serif;
+        }
+        .hero .b1 { top: 8px; left: 8px; z-index: 3; }
+        .hero .b2 { top: 32px; left: 64px; z-index: 2; }
+        .hero .b3 { top: 56px; left: 120px; z-index: 1; }
+        .layer-hint {
+            will-change: opacity;
+            position: relative;
+            margin-top: 10px;
+        }
+        .layer-hint .floater {
+            position: relative;
+            z-index: 4;
+            display: inline-block;
+            padding: 4px 8px;
+            background: #2f3542;
+            color: #8b91a3;
+            font-size: 12px;
+        }
         .mobile-heading {
             margin: 0;
             font-size: 1.4rem;
@@ -148,7 +179,7 @@
     <main>
         <h1>CSS hunt</h1>
         <p class="lede">
-            Sei bug messi apposta. Premi <kbd>F6</kbd>
+            Sette casi messi apposta. Premi <kbd>F6</kbd>
             (o il pulsante <code>F6 CSS</code> accanto a F3/F4), passa il mouse sui riquadri,
             <kbd>P</kbd> per fermare il pannello e leggerlo, poi <kbd>S</kbd> per la scansione.
         </p>
@@ -189,6 +220,18 @@
                 <p>Come un widget Elementor: il file è 800×600 e gli attributi restano quelli. La colonna dà la larghezza, <code>height: 300px !important</code>, <code>object-fit</code> è il default <code>fill</code>.</p>
                 <div class="widget-image">
                     <img class="widget-img" width="800" height="600" alt="Foto widget" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='800' height='600'%3E%3Crect width='800' height='600' fill='%233498db'/%3E%3Ccircle cx='400' cy='300' r='140' fill='%23ffd36a'/%3E%3C/svg%3E">
+                </div>
+            </article>
+            <article>
+                <h2>7. Stacking context</h2>
+                <p><code>div.hero</code> ha <code>transform</code>: i tre badge con <code>z-index</code> restano chiusi lì dentro. <code>will-change: opacity</code> è solo un avviso grigio.</p>
+                <div class="hero">
+                    <span class="b1">z 3</span>
+                    <span class="b2">z 2</span>
+                    <span class="b3">z 1</span>
+                </div>
+                <div class="layer-hint">
+                    <span class="floater">will-change</span>
                 </div>
             </article>
         </div>
