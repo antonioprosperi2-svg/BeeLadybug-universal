@@ -1,6 +1,6 @@
 # Changelog
 <p align="center">
-  <video src=https://beeenginejs.com/wp-content/uploads/2026/10/beeladybug-logo-animato.mp4"" autoplay loop muted playsinline width="640"></video>
+  <img src="https://beeenginejs.com/wp-content/uploads/2026/10/beeladybug-logo-animato-ezgif.com-effects.gif" alt="BeeEngine Logo" width="900" />
 </p>
 ## 0.5.4
 
