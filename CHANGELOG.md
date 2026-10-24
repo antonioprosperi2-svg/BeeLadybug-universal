@@ -1,5 +1,7 @@
 # Changelog
-
+<p align="center">
+  <video src=https://beeenginejs.com/wp-content/uploads/2026/10/beeladybug-logo-animato.mp4"" autoplay loop muted playsinline width="640"></video>
+</p>
 ## 0.5.4
 
 - CSS hunt walks ancestors and groups stacking contexts by cause, for example `div.hero creates stacking context (transform) - z-index of 3 children is trapped`. Idea from Rishabh Mishra.

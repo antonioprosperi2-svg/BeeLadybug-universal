@@ -2,7 +2,7 @@
 # BeeLadybug
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/antonioprosperi2-svg/BeeLadybug-universal/main/docs/logo.jpg" alt="BeeLadybug" width="720">
+  <video src=https://beeenginejs.com/wp-content/uploads/2026/10/beeladybug-logo-animato.mp4"" autoplay loop muted playsinline width="640"></video>
 </p>
 
 Universal telemetry and visual inspection overlay.
