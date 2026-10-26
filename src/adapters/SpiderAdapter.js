@@ -1,12 +1,15 @@
 /**
  * SpiderAdapter — long-task and slow-resource tracker.
  *
- * Native PerformanceObserver only. The core must never import this file.
+ * Native PerformanceObserver only. `snapshot()` keeps the long tasks and
+ * slow resources already seen. The core must never import this file.
  *
  * @example
  * const spider = new SpiderAdapter(core, { resourceThreshold: 500 });
  * spider.attach();
  */
+
+const MAX_SPIDER = 40;
 
 export const SPIDER_ADAPTER_DEFAULTS = Object.freeze({
     longTaskThreshold: 50,
@@ -30,6 +33,8 @@ export class SpiderAdapter {
         this.#longObserver = null;
         this.#resourceObserver = null;
         this.#longTaskMissingLogged = false;
+        this.#longTasks = [];
+        this.#resources = [];
         this.#onLongTask = (list) => this.#ingestLongTasks(list);
         this.#onResource = (list) => this.#ingestResources(list);
     }
@@ -38,6 +43,8 @@ export class SpiderAdapter {
     #longObserver;
     #resourceObserver;
     #longTaskMissingLogged;
+    #longTasks;
+    #resources;
     #onLongTask;
     #onResource;
 
@@ -48,7 +55,8 @@ export class SpiderAdapter {
         this.core?.registerAdapter('spider', {
             enable: () => this.#enable(),
             disable: () => this.#disable(),
-            label: 'SPIDER'
+            label: 'SPIDER',
+            snapshot: () => this.snapshot()
         });
         this.core?.sendData('log', {
             source: this.source,
@@ -63,6 +71,36 @@ export class SpiderAdapter {
         this.#disable();
         this.core?.unregisterAdapter('spider');
         return this;
+    }
+
+    /**
+     * Long tasks and slow resources kept since attach. Returns null when detached.
+     * @returns {{ name: string, items: Array<{ severity: string, selector: string, rule: string, value: string, source: string }> } | null}
+     */
+    snapshot() {
+        if (!this.#attached) return null;
+        const items = [];
+        for (let i = 0; i < this.#longTasks.length; i++) {
+            const entry = this.#longTasks[i];
+            items.push({
+                severity: 'warn',
+                selector: entry.attribution,
+                rule: 'longtask',
+                value: `${entry.duration}ms`,
+                source: this.source
+            });
+        }
+        for (let i = 0; i < this.#resources.length; i++) {
+            const entry = this.#resources[i];
+            items.push({
+                severity: 'warn',
+                selector: entry.name,
+                rule: 'resource',
+                value: `${entry.duration}ms`,
+                source: this.source
+            });
+        }
+        return { name: 'spider', items };
     }
 
     #enable() {
@@ -111,6 +149,10 @@ export class SpiderAdapter {
         for (let i = 0; i < entries.length; i++) {
             const entry = entries[i];
             if (!entry || entry.duration <= this.longTaskThreshold) continue;
+            remember(this.#longTasks, {
+                attribution: entry.attribution?.[0]?.containerType ?? 'unknown',
+                duration: Math.round(entry.duration)
+            });
             this.core.sendData('telemetry', {
                 source: this.source,
                 kind: 'longtask',
@@ -126,6 +168,10 @@ export class SpiderAdapter {
         for (let i = 0; i < entries.length; i++) {
             const entry = entries[i];
             if (!entry || entry.duration <= this.resourceThreshold) continue;
+            remember(this.#resources, {
+                name: String(entry.name || 'resource'),
+                duration: Math.round(entry.duration)
+            });
             this.core.sendData('warn', {
                 source: this.source,
                 message: `Risorsa lenta: ${entry.name} (${Math.round(entry.duration)}ms)`
@@ -141,6 +187,11 @@ export class SpiderAdapter {
             message: 'Long task detection non disponibile in questo browser'
         });
     }
+}
+
+function remember(list, entry) {
+    list.unshift(entry);
+    if (list.length > MAX_SPIDER) list.pop();
 }
 
 function positive(value, fallback) {

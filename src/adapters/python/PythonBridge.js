@@ -10,6 +10,7 @@
  *
  * ingest() is the same parser used by the socket, so tests and the mock
  * demo do not need a live Python process.
+ * `snapshot()` lists the latest metric received for each name.
  */
 
 export const PYTHON_BRIDGE_DEFAULTS = Object.freeze({
@@ -35,16 +36,27 @@ export class PythonBridge {
 
         this.#socket = null;
         this.#wanted = false;
+        this.#live = true;
         this.#timer = 0;
         this.#packets = 0;
         this.#retries = 0;
+        this.#metrics = new Map();
+        this.core?.registerAdapter('python', {
+            label: 'PYTHON',
+            enabled: true,
+            enable: () => this.#enable(),
+            disable: () => this.#disable(),
+            snapshot: () => this.snapshot()
+        });
     }
 
     #socket;
     #wanted;
+    #live;
     #timer;
     #packets;
     #retries;
+    #metrics;
 
     get connected() {
         return this.status === 'open';
@@ -53,6 +65,7 @@ export class PythonBridge {
     connect(url) {
         if (url) this.url = url;
         this.#wanted = true;
+        this.#live = true;
         this.#retries = 0;
         this.#open();
         return this;
@@ -75,6 +88,25 @@ export class PythonBridge {
             message: 'PythonBridge disconnected.'
         });
         return this;
+    }
+
+    /**
+     * Latest metric value for each name received through ingest().
+     * @returns {{ name: string, items: Array<{ severity: string, selector: string, rule: string, value: string, source: string }> }}
+     */
+    snapshot() {
+        const items = [];
+        for (const [name, metric] of this.#metrics) {
+            const unit = metric.unit ? ` ${metric.unit}` : '';
+            items.push({
+                severity: 'ok',
+                selector: name,
+                rule: 'metric',
+                value: `${metricText(metric.value)}${unit}`,
+                source: this.source
+            });
+        }
+        return { name: 'python', items };
     }
 
     /**
@@ -117,6 +149,7 @@ export class PythonBridge {
         }
 
         const payload = unpackPayload(data, this.source);
+        if (type === 'metric') this.#rememberMetric(payload);
         this.#packets += 1;
         this.core.sendData(type, payload);
         this.core.sendData('state', {
@@ -128,7 +161,7 @@ export class PythonBridge {
     }
 
     #open() {
-        if (!this.#wanted) return;
+        if (!this.#wanted || !this.#live) return;
         if (typeof WebSocket === 'undefined') {
             this.core?.sendData('error', {
                 source: this.source,
@@ -205,7 +238,7 @@ export class PythonBridge {
     }
 
     #scheduleReconnect() {
-        if (!this.#wanted || !this.autoReconnect) return;
+        if (!this.#wanted || !this.#live || !this.autoReconnect) return;
         this.#clearTimer();
         this.#timer = setTimeout(() => this.#open(), this.reconnectMs);
     }
@@ -213,6 +246,39 @@ export class PythonBridge {
     #clearTimer() {
         if (this.#timer && typeof clearTimeout === 'function') clearTimeout(this.#timer);
         this.#timer = 0;
+    }
+
+    #enable() {
+        this.#live = true;
+        if (this.#wanted) this.#open();
+    }
+
+    #disable() {
+        this.#live = false;
+        this.#clearTimer();
+        const socket = this.#socket;
+        this.#socket = null;
+        if (socket) {
+            try {
+                socket.close();
+            } catch {
+                /* already closing */
+            }
+        }
+        if (this.status !== 'idle') this.#setStatus('closed');
+    }
+
+    #rememberMetric(payload) {
+        const name = typeof payload.name === 'string' && payload.name ? payload.name : 'metric';
+        if (this.#metrics.has(name)) this.#metrics.delete(name);
+        this.#metrics.set(name, {
+            value: payload.value,
+            unit: typeof payload.unit === 'string' ? payload.unit : ''
+        });
+        while (this.#metrics.size > 40) {
+            const oldest = this.#metrics.keys().next().value;
+            this.#metrics.delete(oldest);
+        }
     }
 
     #setStatus(status) {
@@ -223,6 +289,12 @@ export class PythonBridge {
             value: status
         });
     }
+}
+
+function metricText(value) {
+    if (value == null) return '';
+    if (typeof value === 'object') return JSON.stringify(value);
+    return String(value);
 }
 
 function unpackPayload(data, source) {

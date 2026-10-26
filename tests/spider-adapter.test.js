@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { afterEach, test } from 'node:test';
-import { BeeLadybugCore, SpiderAdapter, SPIDER_ADAPTER_DEFAULTS } from '../src/index.js';
+import { BeeLadybugCore, SpiderAdapter, SPIDER_ADAPTER_DEFAULTS, exportReport } from '../src/index.js';
 
 const NativePerformanceObserver = globalThis.PerformanceObserver;
 
@@ -108,5 +108,48 @@ test('SpiderAdapter emette telemetry per longtask sopra soglia', () => {
     assert.equal(bee.getHistory('longtask').last, 90);
 
     spider.detach();
+    bee.destroy();
+});
+
+test('snapshot tiene long task e risorse lente già viste', () => {
+    const observers = installFakePerformanceObserver(['longtask', 'resource']);
+    const bee = makeCore();
+    const spider = new SpiderAdapter(bee, { resourceThreshold: 500 });
+    spider.attach();
+
+    const long = observers.find((obs) => obs.opts.entryTypes[0] === 'longtask');
+    const resource = observers.find((obs) => obs.opts.entryTypes[0] === 'resource');
+    long.emit([
+        { duration: 20, attribution: [{ containerType: 'window' }] },
+        { duration: 90.4, attribution: [{ containerType: 'iframe' }] }
+    ]);
+    resource.emit([
+        { name: 'https://cdn.example/app.js', duration: 120 },
+        { name: 'https://cdn.example/slow.js', duration: 640.2 }
+    ]);
+
+    const shot = spider.snapshot();
+    assert.deepEqual(shot.items, [
+        {
+            severity: 'warn',
+            selector: 'iframe',
+            rule: 'longtask',
+            value: '90ms',
+            source: 'spider'
+        },
+        {
+            severity: 'warn',
+            selector: 'https://cdn.example/slow.js',
+            rule: 'resource',
+            value: '640ms',
+            source: 'spider'
+        }
+    ]);
+
+    const report = exportReport(bee, { format: 'json' });
+    assert.equal(report.adapters.some((section) => section.name === 'spider'), true);
+
+    spider.detach();
+    assert.equal(spider.snapshot(), null);
     bee.destroy();
 });

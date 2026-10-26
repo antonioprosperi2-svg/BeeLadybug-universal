@@ -2,12 +2,17 @@
  * AntAdapter — DOM mutation rate tracker.
  *
  * Independent MutationObserver. Can sit on the same root as WebDOMAdapter.
+ * `snapshot()` lists nodes still over the mutation threshold.
  * The core must never import this file.
  *
  * @example
  * const ant = new AntAdapter(core, { root: document.body, threshold: 30 });
  * ant.attach();
  */
+
+import { isReportNoise } from '../core/ReportExporter.js';
+
+const MAX_HOT = 40;
 
 export const ANT_ADAPTER_DEFAULTS = Object.freeze({
     threshold: 30,
@@ -35,12 +40,14 @@ export class AntAdapter {
         this.#attached = false;
         this.#observer = null;
         this.#counts = new WeakMap();
+        this.#hot = [];
         this.#onMutate = (records) => this.#ingest(records);
     }
 
     #attached;
     #observer;
     #counts;
+    #hot;
     #onMutate;
 
     attach() {
@@ -50,7 +57,8 @@ export class AntAdapter {
         this.core?.registerAdapter('ant', {
             enable: () => this.#enable(),
             disable: () => this.#disable(),
-            label: 'ANT'
+            label: 'ANT',
+            snapshot: () => this.snapshot()
         });
         this.core?.sendData('log', {
             source: this.source,
@@ -65,6 +73,30 @@ export class AntAdapter {
         this.#disable();
         this.core?.unregisterAdapter('ant');
         return this;
+    }
+
+    /**
+     * Nodes whose current window is still at or above the threshold.
+     * Hidden boxes, the WordPress admin bar, and BeeLadybug chrome are skipped.
+     * @returns {{ name: string, items: Array<{ severity: string, selector: string, rule: string, value: string, source: string }> } | null}
+     */
+    snapshot() {
+        if (!this.#attached) return null;
+        const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+        const items = [];
+        for (let i = 0; i < this.#hot.length && items.length < MAX_HOT; i++) {
+            const row = this.#hot[i];
+            if (!row || now - row.windowStart >= this.windowMs) continue;
+            if (isBeeChrome(row.node) || isReportNoise(row.node)) continue;
+            items.push({
+                severity: 'warn',
+                selector: row.selector,
+                rule: 'mutations',
+                value: `${row.count}/${this.windowMs}ms`,
+                source: this.source
+            });
+        }
+        return { name: 'ant', items };
     }
 
     #enable() {
@@ -89,6 +121,7 @@ export class AntAdapter {
         if (this.#observer) this.#observer.disconnect();
         this.#observer = null;
         this.#counts = new WeakMap();
+        this.#hot = [];
     }
 
     #ingest(records) {
@@ -104,6 +137,7 @@ export class AntAdapter {
                 this.#counts.set(node, slot);
             }
             slot.count += 1;
+            this.#track(node, slot);
             if (slot.count < this.threshold || slot.warned) continue;
 
             slot.warned = true;
@@ -114,6 +148,23 @@ export class AntAdapter {
                 node: selector
             });
         }
+    }
+
+    #track(node, slot) {
+        const index = this.#hot.findIndex((row) => row.node === node);
+        if (slot.count < this.threshold) {
+            if (index >= 0) this.#hot.splice(index, 1);
+            return;
+        }
+        const row = {
+            node,
+            selector: nodeSelector(node),
+            count: slot.count,
+            windowStart: slot.windowStart
+        };
+        if (index >= 0) this.#hot[index] = row;
+        else this.#hot.push(row);
+        if (this.#hot.length > MAX_HOT) this.#hot.splice(0, this.#hot.length - MAX_HOT);
     }
 }
 

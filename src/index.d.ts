@@ -417,6 +417,7 @@ export class AntAdapter {
     constructor(core: BeeLadybugCore, options?: AntAdapterOptions);
     attach(): this;
     detach(): this;
+    snapshot(): ReportSnapshot | null;
 }
 
 export interface SpiderAdapterOptions {
@@ -435,6 +436,7 @@ export class SpiderAdapter {
     constructor(core: BeeLadybugCore, options?: SpiderAdapterOptions);
     attach(): this;
     detach(): this;
+    snapshot(): ReportSnapshot | null;
 }
 
 export type PythonBridgeStatus = 'idle' | 'connecting' | 'open' | 'closed';
@@ -460,4 +462,5 @@ export class PythonBridge {
     connect(url?: string): this;
     disconnect(): this;
     ingest(raw: unknown): this;
+    snapshot(): ReportSnapshot;
 }

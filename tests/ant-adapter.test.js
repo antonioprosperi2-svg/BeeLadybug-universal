@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { afterEach, test } from 'node:test';
-import { AntAdapter, ANT_ADAPTER_DEFAULTS, BeeLadybugCore } from '../src/index.js';
+import { AntAdapter, ANT_ADAPTER_DEFAULTS, BeeLadybugCore, exportReport } from '../src/index.js';
 
 const NativeMutationObserver = globalThis.MutationObserver;
 
@@ -114,5 +114,46 @@ test('AntAdapter usa la prima classe se manca l\'id', () => {
     const warn = bee.getLogs().find((packet) => packet.type === 'warn' && packet.source === 'ant');
     assert.equal(warn.payload.node, '.card');
     ant.detach();
+    bee.destroy();
+});
+
+test('snapshot elenca i nodi sopra soglia e salta la barra WordPress', () => {
+    const observers = installFakeMutationObserver();
+    const bee = makeCore();
+    const root = fakeNode({ id: 'stage' });
+    const hot = fakeNode({ id: 'hot' });
+    const quiet = fakeNode({ id: 'quiet' });
+    const admin = fakeNode({ id: 'wpadminbar' });
+    const ant = new AntAdapter(bee, { root, threshold: 3, windowMs: 1000 });
+    ant.attach();
+
+    observers[0].emit([
+        { target: hot, type: 'attributes' },
+        { target: hot, type: 'attributes' },
+        { target: hot, type: 'attributes' },
+        { target: hot, type: 'childList' },
+        { target: quiet, type: 'attributes' },
+        { target: quiet, type: 'attributes' },
+        { target: admin, type: 'attributes' },
+        { target: admin, type: 'attributes' },
+        { target: admin, type: 'attributes' }
+    ]);
+
+    const shot = ant.snapshot();
+    assert.equal(shot.name, 'ant');
+    assert.equal(shot.items.length, 1);
+    assert.equal(shot.items[0].selector, '#hot');
+    assert.equal(shot.items[0].rule, 'mutations');
+    assert.equal(shot.items[0].severity, 'warn');
+    assert.equal(shot.items[0].value, '4/1000ms');
+
+    const report = exportReport(bee, { format: 'json' });
+    assert.equal(report.adapters.some((section) => section.name === 'ant'), true);
+
+    bee.setAdapterEnabled('ant', false);
+    assert.deepEqual(ant.snapshot().items, []);
+
+    ant.detach();
+    assert.equal(ant.snapshot(), null);
     bee.destroy();
 });
