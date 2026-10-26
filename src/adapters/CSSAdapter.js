@@ -4,12 +4,17 @@
  * Hover an element to list !important hits, viewport overflow, negative
  * margins, invisible text, click blockers and stretched images. The core
  * only receives packets and detail rows; it does not parse CSS.
+ * `snapshot()` repeats that scan for the report while the hunt is off.
  *
  * @example
  * const css = new CSSAdapter(core);
  * css.attach();
  * // F6 toggles hunt. S scans the page while hunt is on.
  */
+
+import { isReportNoise } from '../core/ReportExporter.js';
+
+const MAX_SNAPSHOT = 80;
 
 export const CSS_ADAPTER_DEFAULTS = Object.freeze({
     source: 'css',
@@ -104,7 +109,8 @@ export class CSSAdapter {
             hotkey: this.hotkey,
             enabled: false,
             enable: () => this.#enable(),
-            disable: () => this.#disable()
+            disable: () => this.#disable(),
+            snapshot: () => this.snapshot()
         });
         this.core?.sendData('log', {
             source: this.source,
@@ -189,6 +195,98 @@ export class CSSAdapter {
             });
         }
         return this;
+    }
+
+    /**
+     * Full hunt scan for the report. Hunt can stay off: nothing is logged,
+     * pinned, or published. Hidden boxes, WordPress admin, and BeeLadybug
+     * chrome are skipped.
+     * @returns {{ name: string, items: Array<{ severity: string, selector: string, rule: string, value: string, source: string }> } | null}
+     */
+    snapshot() {
+        if (!this.#attached) return null;
+        if (typeof document === 'undefined' || !document.body) return { name: 'css', items: [] };
+
+        const built = collectImportantRules();
+        const nodes = document.body.querySelectorAll('*');
+        const overflow = [];
+        const rows = [];
+        for (let i = 0; i < nodes.length; i++) {
+            const el = nodes[i];
+            if (!el || isBeeChrome(el) || isSkippedTag(el) || isReportNoise(el)) continue;
+            const measured = measureViewportOverflow(el);
+            if (measured) overflow.push(measured);
+            const findings = [];
+            pushNegativeMargins(el, findings);
+            pushInvisible(el, findings);
+            pushBlockers(el, findings);
+            pushImage(el, findings);
+            pushStacking(el, findings);
+            pushImportant(el, built.rules, findings);
+            for (let j = 0; j < findings.length; j++) {
+                rows.push({ el, selector: cssPath(el), ...findings[j] });
+            }
+        }
+        const kept = keepOverflowCauses(overflow);
+        for (let i = 0; i < kept.length; i++) {
+            const cause = kept[i];
+            rows.push({
+                el: cause.el,
+                selector: cssPath(cause.el),
+                kind: 'overflows viewport',
+                rank: 0,
+                level: 'error',
+                score: cause.score
+            });
+        }
+
+        let causes = [];
+        const plain = [];
+        for (let i = 0; i < rows.length; i++) {
+            const row = rows[i];
+            if (describeCause(row.kind, row.selector)) {
+                causes = addCause(causes, { kind: row.kind, path: row.selector, el: row.el }, MAX_SNAPSHOT);
+            } else {
+                plain.push(row);
+            }
+        }
+
+        const items = [];
+        for (let i = 0; i < causes.length; i++) {
+            const entry = causes[i];
+            items.push({
+                severity: reportSeverity(entry.level),
+                selector: entry.cause,
+                rule: causeRule(entry.type),
+                value: formatCause(entry),
+                source: this.source
+            });
+        }
+        const groups = groupIssues(plain);
+        for (let i = 0; i < groups.length; i++) {
+            const group = groups[i];
+            const count = group.count > 1 ? ` ×${group.count}` : '';
+            items.push({
+                severity: reportSeverity(group.level),
+                selector: group.selector,
+                rule: plainRule(group.kind),
+                value: `${group.kind}${count}`,
+                source: this.source
+            });
+        }
+        for (let i = 0; i < built.unreadable.length; i++) {
+            const label = built.unreadable[i];
+            items.push({
+                severity: 'ok',
+                selector: label,
+                rule: 'unreadable sheet',
+                value: label,
+                source: this.source
+            });
+        }
+        items.sort((a, b) => severityRank(a.severity) - severityRank(b.severity));
+        if (items.length > MAX_SNAPSHOT) items.length = MAX_SNAPSHOT;
+        return { name: 'css', items };
     }
 
     #enable() {
@@ -917,6 +1015,34 @@ function elementCausesOverflow(el) {
 
 function nowMs() {
     return typeof performance !== 'undefined' ? performance.now() : Date.now();
+}
+
+function reportSeverity(level) {
+    if (level === 'error') return 'error';
+    if (level === 'warn' || level === 'warning') return 'warn';
+    return 'ok';
+}
+
+function severityRank(level) {
+    if (level === 'error') return 0;
+    if (level === 'warn') return 1;
+    return 2;
+}
+
+function causeRule(type) {
+    if (type === 'block') return 'click blocked';
+    if (type === 'stack') return 'stacking context';
+    if (type === 'stack-hint') return 'will-change';
+    return 'overflow';
+}
+
+function plainRule(kind) {
+    const text = String(kind || '');
+    if (text.startsWith('!important')) return '!important';
+    if (text.startsWith('invisible text')) return 'invisible text';
+    if (text.startsWith('negative margin')) return 'negative margin';
+    if (text === 'distorted image') return 'distorted image';
+    return text;
 }
 
 function issue(kind, rank, score) {

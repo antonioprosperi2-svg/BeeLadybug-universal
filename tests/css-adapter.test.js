@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { BeeLadybugCore, CSSAdapter } from '../src/index.js';
+import { BeeLadybugCore, CSSAdapter, exportReport } from '../src/index.js';
 import { addCause, describeCause, formatCause, formatIssue, groupIssues, isDistortedImage, keepOverflowCauses, pushStickyIssue, rememberIssue, stackingReasons } from '../src/adapters/CSSAdapter.js';
 import { domNoiseQuiet } from '../src/adapters/WebDOMAdapter.js';
 
@@ -181,3 +181,215 @@ test('formatCause raggruppa i figli chiusi in uno stacking context', () => {
         'div.layer-hint will-change: opacity — z-index of 1 child stays in this layer'
     );
 });
+
+test('snapshot gira con la hunt spenta e salta nascosti e admin', () => {
+    const previousDocument = globalThis.document;
+    const previousStyle = globalThis.getComputedStyle;
+    const previousWindow = globalThis.window;
+    const bee = makeCore();
+    const css = new CSSAdapter(bee);
+    let published = 0;
+    bee.publishDetail = () => {
+        published += 1;
+        return bee;
+    };
+    bee.publishIssues = () => {
+        published += 1;
+        return bee;
+    };
+    css.attach();
+    assert.equal(css.active, false);
+    assert.deepEqual(css.snapshot(), { name: 'css', items: [] });
+
+    const bleed = box('ARTICLE', 'bleed', { left: 0, top: 0, width: 900, height: 20, right: 900, bottom: 20 });
+    const wrap = box('DIV', 'wrap', { left: 0, top: 0, width: 900, height: 40, right: 900, bottom: 40 });
+    wrap.contains = (node) => node === bleed;
+    const secret = box('DIV', 'secret', { left: 0, top: 0, width: 900, height: 20, right: 900, bottom: 20 }, { display: 'none' });
+    const admin = box('DIV', 'wpadminbar', { left: 0, top: 0, width: 900, height: 20, right: 900, bottom: 20 });
+    const toolbar = box('A', 'toolbar', { left: 0, top: 0, width: 40, height: 20, right: 50, bottom: 30 });
+    toolbar.parentElement = admin;
+    const plugin = box('DIV', 'plugin', { left: 12, top: 12, width: 40, height: 20, right: 52, bottom: 32 });
+    plugin.className = 'ab-item';
+    const ghost = box('DIV', 'ghost', { left: 0, top: 0, width: 0, height: 20, right: 0, bottom: 20 }, { marginLeft: '-8px' });
+    const pull = box('DIV', 'pull', { left: 12, top: 12, width: 40, height: 20, right: 52, bottom: 32 }, { marginLeft: '-8px' });
+    const hot = box('DIV', 'hot', { left: 12, top: 70, width: 40, height: 20, right: 52, bottom: 90 });
+    hot.id = '';
+    hot.classList = ['hot'];
+    hot.matches = (selector) => selector === '.hot';
+    const hero = box('DIV', 'hero', { left: 12, top: 80, width: 80, height: 40, right: 92, bottom: 120 }, { transform: 'translateZ(0)' });
+    const trapped = box('SPAN', 'trapped', { left: 16, top: 84, width: 20, height: 16, right: 36, bottom: 100 }, { zIndex: '3' });
+    trapped.parentElement = hero;
+    const hint = box('DIV', 'hint', { left: 12, top: 140, width: 80, height: 40, right: 92, bottom: 180 }, { willChange: 'opacity' });
+    const floater = box('SPAN', 'floater', { left: 16, top: 144, width: 20, height: 16, right: 36, bottom: 160 }, { zIndex: '4' });
+    floater.parentElement = hint;
+    const mask = box('DIV', 'mask', { left: 200, top: 10, width: 80, height: 40, right: 280, bottom: 50 });
+    const one = box('BUTTON', 'one', { left: 210, top: 16, width: 20, height: 16, right: 230, bottom: 32 });
+    const two = box('BUTTON', 'two', { left: 240, top: 16, width: 20, height: 16, right: 260, bottom: 32 });
+    const nodes = [bleed, wrap, secret, admin, toolbar, plugin, ghost, pull, hot, hero, trapped, hint, floater, mask, one, two];
+
+    globalThis.getComputedStyle = (el, pseudo) => computedStyle(el, pseudo);
+    globalThis.window = { innerWidth: 800, innerHeight: 600 };
+    globalThis.document = {
+        documentElement: {
+            clientWidth: 800,
+            tagName: 'HTML',
+            nodeType: 1,
+            getBoundingClientRect() {
+                return { left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600 };
+            }
+        },
+        body: {
+            tagName: 'BODY',
+            nodeType: 1,
+            querySelectorAll() {
+                return nodes;
+            }
+        },
+        elementFromPoint(x, y) {
+            if (x >= 200 && x <= 280 && y >= 10 && y <= 50) return mask;
+            return null;
+        },
+        styleSheets: [
+            {
+                href: 'https://cdn.example/app.css',
+                get cssRules() {
+                    throw new Error('cross-origin');
+                }
+            },
+            {
+                cssRules: [{
+                    type: 1,
+                    selectorText: '.hot',
+                    style: {
+                        length: 1,
+                        item() { return 'color'; },
+                        getPropertyPriority() { return 'important'; },
+                        getPropertyValue() { return 'red'; }
+                    }
+                }]
+            }
+        ]
+    };
+
+    try {
+        const logs = bee.getLogs().length;
+        const shot = css.snapshot();
+        assert.equal(css.active, false);
+        assert.equal(published, 0);
+        assert.equal(bee.getLogs().length, logs);
+        assert.equal(shot.name, 'css');
+
+        const overflow = shot.items.find((item) => item.rule === 'overflow');
+        assert.equal(overflow.selector, 'article#bleed');
+        assert.equal(overflow.severity, 'error');
+        assert.equal(overflow.value, 'article#bleed overflows viewport');
+        assert.equal(shot.items.some((item) => item.selector === 'div#wrap'), false);
+
+        const blocked = shot.items.find((item) => item.rule === 'click blocked');
+        assert.equal(blocked.selector, 'div#mask');
+        assert.equal(blocked.value, 'div#mask blocks clicks on 2 elements');
+
+        const stack = shot.items.find((item) => item.rule === 'stacking context');
+        assert.equal(stack.severity, 'error');
+        assert.equal(
+            stack.value,
+            'div#hero creates stacking context (transform) - z-index of 1 child is trapped'
+        );
+        const layer = shot.items.find((item) => item.rule === 'will-change');
+        assert.equal(layer.severity, 'ok');
+        assert.equal(
+            layer.value,
+            'div#hint will-change: opacity — z-index of 1 child stays in this layer'
+        );
+
+        const important = shot.items.find((item) => item.rule === '!important');
+        assert.equal(important.severity, 'warn');
+        assert.equal(important.selector, 'div.hot');
+        assert.equal(important.value, '!important .hot { color: red }');
+        const margin = shot.items.find((item) => item.rule === 'negative margin');
+        assert.equal(margin.selector, 'div#pull');
+        assert.equal(margin.value, 'negative margin margin-left: -8px');
+
+        const sheet = shot.items.find((item) => item.rule === 'unreadable sheet');
+        assert.equal(sheet.severity, 'ok');
+        assert.equal(sheet.selector, 'https://cdn.example/app.css');
+
+        for (const selector of ['div#secret', 'div#wpadminbar', 'a#toolbar', 'div#plugin', 'div#ghost']) {
+            assert.equal(shot.items.some((item) => item.selector === selector), false, selector);
+        }
+
+        const report = exportReport(bee, { format: 'json' });
+        assert.equal(report.adapters.some((section) => section.name === 'css'), true);
+
+        css.detach();
+        assert.equal(css.snapshot(), null);
+    } finally {
+        if (previousDocument === undefined) delete globalThis.document;
+        else globalThis.document = previousDocument;
+        if (previousStyle === undefined) delete globalThis.getComputedStyle;
+        else globalThis.getComputedStyle = previousStyle;
+        if (previousWindow === undefined) delete globalThis.window;
+        else globalThis.window = previousWindow;
+        bee.destroy();
+    }
+});
+
+function box(tag, id, rect, styleMap) {
+    return {
+        nodeType: 1,
+        tagName: tag,
+        id,
+        className: '',
+        classList: [],
+        parentElement: null,
+        childElementCount: 0,
+        textContent: '',
+        styleMap: styleMap || null,
+        hasAttribute() { return false; },
+        matches() { return false; },
+        contains() { return false; },
+        getBoundingClientRect() { return rect; }
+    };
+}
+
+function computedStyle(el, pseudo) {
+    if (pseudo) {
+        return {
+            content: 'none',
+            position: 'static',
+            pointerEvents: 'auto',
+            width: '0',
+            height: '0',
+            left: '0',
+            top: '0',
+            getPropertyValue() { return ''; }
+        };
+    }
+    const values = {
+        display: 'block',
+        visibility: 'visible',
+        opacity: '1',
+        color: 'rgb(0, 0, 0)',
+        backgroundColor: 'rgba(0, 0, 0, 0)',
+        transform: 'none',
+        filter: 'none',
+        position: 'static',
+        zIndex: 'auto',
+        willChange: 'auto',
+        objectFit: 'fill',
+        marginTop: '0px',
+        marginRight: '0px',
+        marginBottom: '0px',
+        marginLeft: '0px',
+        ...(el && el.styleMap)
+    };
+    return {
+        ...values,
+        getPropertyValue(prop) {
+            const camel = prop.replace(/-([a-z])/g, (_, char) => char.toUpperCase());
+            if (values[prop] != null) return String(values[prop]);
+            if (values[camel] != null) return String(values[camel]);
+            return '';
+        }
+    };
+}

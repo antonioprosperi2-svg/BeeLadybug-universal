@@ -4,6 +4,8 @@
  * Reads box models, the node under the pointer, and mutation noise,
  * then pushes packets into the core. Highlights are drawn on a stacked
  * overlay canvas so the page stays untouched.
+ * `snapshot()` hands the report the box model, problem nodes, and
+ * the latest mutation counts.
  *
  * The core must never import this file.
  *
@@ -11,6 +13,10 @@
  * const adapter = new WebDOMAdapter(core, { root: document.body, watch: ['.card'] });
  * adapter.attach();
  */
+
+import { isReportNoise } from '../core/ReportExporter.js';
+
+const MAX_PROBLEM_ROWS = 40;
 
 export const WEB_DOM_ADAPTER_DEFAULTS = Object.freeze({
     overlay: true,
@@ -52,6 +58,7 @@ export class WebDOMAdapter {
         this.hover = null;
 
         this.#attached = false;
+        this.#reporting = true;
         this.#overlay = null;
         this.#unsubscribe = null;
         this.#observer = null;
@@ -62,6 +69,9 @@ export class WebDOMAdapter {
         this.#mutAdded = 0;
         this.#mutRemoved = 0;
         this.#mutAttr = 0;
+        this.#seenAdded = 0;
+        this.#seenRemoved = 0;
+        this.#seenAttr = 0;
         this.#mutTimer = 0;
         this.#lastHoverKey = '';
         this.#onMove = (event) => {
@@ -78,6 +88,7 @@ export class WebDOMAdapter {
     }
 
     #attached;
+    #reporting;
     #overlay;
     #unsubscribe;
     #observer;
@@ -88,6 +99,9 @@ export class WebDOMAdapter {
     #mutAdded;
     #mutRemoved;
     #mutAttr;
+    #seenAdded;
+    #seenRemoved;
+    #seenAttr;
     #mutTimer;
     #lastHoverKey;
     #onMove;
@@ -123,6 +137,15 @@ export class WebDOMAdapter {
             this.#rafId = requestAnimationFrame(this.#onTick);
         }
 
+        this.#reporting = true;
+        this.core?.registerAdapter('dom', {
+            label: 'DOM',
+            enabled: true,
+            enable: () => this.#enable(),
+            disable: () => this.#disable(),
+            snapshot: () => this.snapshot()
+        });
+
         this.core?.sendData('log', {
             source: this.source,
             message: 'WebDOMAdapter attached. Hover a node to inspect the box model.'
@@ -148,6 +171,7 @@ export class WebDOMAdapter {
         this.#rafId = 0;
         if (this.#mutTimer && typeof clearTimeout === 'function') clearTimeout(this.#mutTimer);
         this.#mutTimer = 0;
+        this.core?.unregisterAdapter('dom');
         if (typeof window !== 'undefined') {
             window.removeEventListener('mousemove', this.#onMove, true);
             window.removeEventListener('resize', this.#onResize);
@@ -172,8 +196,36 @@ export class WebDOMAdapter {
         return this;
     }
 
+    /**
+     * Box model of the hover and watched nodes, layout problems under root,
+     * and the latest mutation counts. Returns null when detached.
+     * Hidden boxes, the WordPress admin bar, and BeeLadybug chrome are skipped.
+     * The core stores this function and does not read the rows.
+     * @returns {{ name: string, items: Array<{ severity: string, selector: string, rule: string, value: string, source: string }> } | null}
+     */
+    snapshot() {
+        if (!this.#attached) return null;
+        const items = [];
+        const seen = new Set();
+        const targets = [];
+        if (this.hover) targets.push(this.hover);
+        const watched = this.#watchedNodes();
+        for (let i = 0; i < watched.length; i++) targets.push(watched[i]);
+        for (let i = 0; i < targets.length; i++) {
+            const node = targets[i];
+            if (!node || seen.has(node) || !reportable(node)) continue;
+            seen.add(node);
+            items.push(boxItem(node, this.source));
+        }
+        const problems = problemItems(this.root, this.source);
+        for (let i = 0; i < problems.length; i++) items.push(problems[i]);
+        items.push(mutationItem(this.#mutationCounts(), this.root, this.source));
+        return { name: 'dom', items };
+    }
+
     pump() {
         if (!this.#attached || !this.core) return this;
+        if (!this.#reporting) return this;
 
         const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
         if (this.#lastPump) {
@@ -311,6 +363,11 @@ export class WebDOMAdapter {
         const added = this.#mutAdded;
         const removed = this.#mutRemoved;
         const attr = this.#mutAttr;
+        if (added || removed || attr) {
+            this.#seenAdded = added;
+            this.#seenRemoved = removed;
+            this.#seenAttr = attr;
+        }
         this.#mutAdded = 0;
         this.#mutRemoved = 0;
         this.#mutAttr = 0;
@@ -394,7 +451,26 @@ export class WebDOMAdapter {
         canvas.style.height = `${h}px`;
         canvas.width = Math.round(w * dpr);
         canvas.height = Math.round(h * dpr);
-        canvas.style.display = this.core && this.core.visible === false ? 'none' : 'block';
+        const hidden = !this.#reporting || (this.core && this.core.visible === false);
+        canvas.style.display = hidden ? 'none' : 'block';
+    }
+
+    #enable() {
+        this.#reporting = true;
+        this.#syncOverlay();
+    }
+
+    #disable() {
+        this.#reporting = false;
+        this.#syncOverlay();
+    }
+
+    #mutationCounts() {
+        const pending = this.#mutAdded + this.#mutRemoved + this.#mutAttr;
+        if (pending) {
+            return { added: this.#mutAdded, removed: this.#mutRemoved, attr: this.#mutAttr };
+        }
+        return { added: this.#seenAdded, removed: this.#seenRemoved, attr: this.#seenAttr };
     }
 }
 
@@ -502,6 +578,138 @@ function drawLabel(ctx, el, viewW, viewH, color) {
     ctx.fillStyle = color;
     ctx.textBaseline = 'middle';
     ctx.fillText(text, x + 6, y + height / 2);
+}
+
+function reportable(node) {
+    if (!node || node.nodeType !== 1) return false;
+    if (typeof node.getBoundingClientRect !== 'function') return false;
+    if (isBeeChrome(node) || isReportNoise(node)) return false;
+    return true;
+}
+
+function boxItem(node, source) {
+    const model = boxModel(node);
+    return {
+        severity: 'ok',
+        selector: cssPath(node),
+        rule: 'box',
+        value: boxValue(model, styleOf(node)),
+        source
+    };
+}
+
+function boxValue(model, style) {
+    const border = model.border;
+    const content = model.content;
+    return `border ${Math.round(border.w)}x${Math.round(border.h)} margin ${sideText(style, 'margin')} padding ${sideText(style, 'padding')} content ${Math.round(content.w)}x${Math.round(content.h)} ${model.display}`;
+}
+
+function sideText(style, kind) {
+    const prefix = kind === 'margin' ? 'margin' : 'padding';
+    const top = style ? parsePx(style[`${prefix}Top`]) : 0;
+    const right = style ? parsePx(style[`${prefix}Right`]) : 0;
+    const bottom = style ? parsePx(style[`${prefix}Bottom`]) : 0;
+    const left = style ? parsePx(style[`${prefix}Left`]) : 0;
+    return `${top},${right},${bottom},${left}`;
+}
+
+function problemItems(root, source) {
+    const nodes = collectElements(root);
+    const items = [];
+    const seen = new Set();
+    for (let i = 0; i < nodes.length && items.length < MAX_PROBLEM_ROWS; i++) {
+        const node = nodes[i];
+        if (!node || seen.has(node) || !reportable(node)) continue;
+        seen.add(node);
+        const style = styleOf(node);
+        const margin = sideText(style, 'margin');
+        if (hasNegative(margin)) {
+            items.push(problemItem(node, 'negative margin', margin, source));
+            if (items.length >= MAX_PROBLEM_ROWS) break;
+        }
+        const clip = clipValue(node);
+        if (clip) {
+            items.push(problemItem(node, 'clipped', clip, source));
+            if (items.length >= MAX_PROBLEM_ROWS) break;
+        }
+        const model = boxModel(node);
+        if (model.border.w > 0 && model.border.h > 0 && (model.content.w === 0 || model.content.h === 0)) {
+            items.push(problemItem(
+                node,
+                'collapsed content',
+                `content ${Math.round(model.content.w)}x${Math.round(model.content.h)}`,
+                source
+            ));
+        }
+    }
+    return items;
+}
+
+function problemItem(node, rule, value, source) {
+    return {
+        severity: 'warn',
+        selector: cssPath(node),
+        rule,
+        value,
+        source
+    };
+}
+
+function hasNegative(sides) {
+    return sides.split(',').some((part) => Number(part) < 0);
+}
+
+function clipValue(node) {
+    const sw = finite(node.scrollWidth);
+    const cw = finite(node.clientWidth);
+    const sh = finite(node.scrollHeight);
+    const ch = finite(node.clientHeight);
+    const wide = sw != null && cw != null && sw > cw + 2;
+    const tall = sh != null && ch != null && sh > ch + 2;
+    if (!wide && !tall) return '';
+    return `scroll ${sw ?? 0}x${sh ?? 0} client ${cw ?? 0}x${ch ?? 0}`;
+}
+
+function mutationItem(counts, root, source) {
+    const total = counts.added + counts.removed + counts.attr;
+    return {
+        severity: total > 0 ? 'warn' : 'ok',
+        selector: root && root.nodeType === 1 ? cssPath(root) : 'root',
+        rule: 'mutations',
+        value: `+${counts.added} -${counts.removed} attr ${counts.attr}`,
+        source
+    };
+}
+
+function styleOf(node) {
+    if (typeof getComputedStyle !== 'function') return null;
+    try {
+        return getComputedStyle(node);
+    } catch {
+        return null;
+    }
+}
+
+function collectElements(root) {
+    if (!root) return [];
+    const out = [];
+    if (root.nodeType === 1) out.push(root);
+    let list = null;
+    if (typeof root.querySelectorAll === 'function') {
+        try {
+            list = root.querySelectorAll('*');
+        } catch {
+            list = null;
+        }
+    }
+    if (list) {
+        for (let i = 0; i < list.length; i++) out.push(list[i]);
+    }
+    return out;
+}
+
+function finite(value) {
+    return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
 function countElements(root) {

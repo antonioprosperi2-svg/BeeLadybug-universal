@@ -365,6 +365,7 @@ export class WebDOMAdapter {
     detach(): this;
     setRoot(root: ParentNode | null): this;
     pump(): this;
+    snapshot(): ReportSnapshot | null;
 }
 
 export interface CSSAdapterOptions {
@@ -395,6 +396,7 @@ export class CSSAdapter {
     attach(): this;
     detach(): this;
     scan(): this;
+    snapshot(): ReportSnapshot | null;
 }
 
 export interface AntAdapterOptions {
