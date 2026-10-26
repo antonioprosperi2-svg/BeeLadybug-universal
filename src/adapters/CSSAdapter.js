@@ -219,9 +219,9 @@ export class CSSAdapter {
             const findings = [];
             pushNegativeMargins(el, findings);
             pushInvisible(el, findings);
-            pushBlockers(el, findings);
+            pushBlockers(el, findings, true);
             pushImage(el, findings);
-            pushStacking(el, findings);
+            pushStacking(el, findings, true);
             pushImportant(el, built.rules, findings);
             for (let j = 0; j < findings.length; j++) {
                 rows.push({ el, selector: cssPath(el), ...findings[j] });
@@ -755,7 +755,7 @@ function pushInvisible(el, findings) {
     }
 }
 
-function pushBlockers(el, findings) {
+function pushBlockers(el, findings, skipNoise = false) {
     if (!el.getBoundingClientRect || typeof document.elementFromPoint !== 'function') return;
     const rect = el.getBoundingClientRect();
     const x = rect.left + rect.width / 2;
@@ -768,6 +768,7 @@ function pushBlockers(el, findings) {
     const hit = document.elementFromPoint(x, y);
     if (!hit || isBeeChrome(hit) || hit === el || el.contains(hit)) return;
     if (pseudo && (hit === document.documentElement || hit === document.body)) return;
+    if (skipNoise && isReportNoise(hit)) return;
     findings.push(issue(`click blocked by ${cssPath(hit)}`, ISSUE_RANK.blocker, 40));
 }
 
@@ -950,7 +951,7 @@ function willChangeHint(value) {
     return hit.join(', ');
 }
 
-function pushStacking(el, findings) {
+function pushStacking(el, findings, skipNoise = false) {
     if (!el || typeof getComputedStyle !== 'function' || !el.parentElement) return;
     const own = getComputedStyle(el);
     const ownZ = own.zIndex || own.getPropertyValue?.('z-index') || 'auto';
@@ -958,6 +959,7 @@ function pushStacking(el, findings) {
     let node = el.parentElement;
     while (node && node.nodeType === 1) {
         if (isBeeChrome(node)) return;
+        if (skipNoise && isReportNoise(node)) return;
         const found = stackingReasons(getComputedStyle(node));
         const ancestor = cssPath(node);
         if (found.bugs.length) {

@@ -10,7 +10,7 @@ import { UIOverlay } from './UIOverlay.js';
 import { buildAssistantSnapshot, normalizeAssistant } from './AiAssistant.js';
 import { exportReport as writeReport } from './ReportExporter.js';
 
-export const BEE_LADYBUG_VERSION = '0.6.0';
+export const BEE_LADYBUG_VERSION = '0.6.1';
 
 export const CORE_DEFAULTS = Object.freeze({
     toggleKey: 'F2',

@@ -2,6 +2,13 @@
 <p align="center">
   <img src="https://beeenginejs.com/wp-content/uploads/2026/10/beeladybug-logo-animato-ezgif.com-effects.gif" alt="BeeEngine Logo" width="900" />
 </p>
+## 0.6.1
+
+- Identical report rows (selector, rule and value) collapse to one line with a `×N` count. Repeated errors count once in the summary.
+- The summary counts CORE · LOG as well as adapter rows. Severity `warm` is stored as `warn`.
+- Every descendant of `#wpadminbar` stays out of the report, including `span.ab-icon`. Hitbox coordinates are rounded to one decimal.
+- The downloaded file is already named `report-YYYYMMDD-HHMM.html`.
+
 ## 0.6.0
 
 - F8 and the overlay button **F8 EXPORT** download an HTML telemetry report. `exportReport()` also returns JSON and CSV.

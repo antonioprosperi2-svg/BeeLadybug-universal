@@ -58,7 +58,7 @@ test('exportReport JSON raccoglie log, serie e snapshot registrati', () => {
     assert.equal(report.adapters.length, 1);
     assert.equal(report.adapters[0].name, 'probe');
     assert.equal(report.adapters[0].items[1].severity, 'ok');
-    assert.deepEqual(report.summary, { error: 1, warn: 0, ok: 1 });
+    assert.deepEqual(report.summary, { error: 1, warn: 1, ok: 2 });
     assert.equal(bee.ui, null);
 
     bee.destroy();
@@ -179,4 +179,94 @@ test('isReportNoise salta nascosti, barra WordPress e chrome BeeLadybug', () => 
         className: 'hero',
         getBoundingClientRect() { return { width: 12, height: 12 }; }
     }), false);
+
+    const bar = { id: 'wpadminbar', nodeType: 1, parentElement: null };
+    const menu = { nodeType: 1, id: 'menu', className: 'menu', parentElement: bar };
+    const icon = {
+        nodeType: 1,
+        tagName: 'SPAN',
+        id: '',
+        className: '',
+        classList: ['ab-icon'],
+        parentElement: menu
+    };
+    assert.equal(isReportNoise(icon), true);
+    assert.equal(isReportNoise(menu), true);
+    assert.equal(isReportNoise({
+        nodeType: 1,
+        className: '',
+        classList: ['ab-icon'],
+        getBoundingClientRect() { return { width: 16, height: 16 }; }
+    }), true);
+});
+
+test('righe identiche contano una volta, warm diventa warn, e il log entra nel riepilogo', () => {
+    const bee = makeCore();
+    bee.sendData('error', { source: 'core', message: 'boom', level: 'warm' });
+    bee.registerAdapter('probe', {
+        enable() {},
+        disable() {},
+        snapshot() {
+            return {
+                items: [
+                    { severity: 'error', selector: 'div.hero', rule: 'overflow', value: '12px', source: 'css' },
+                    { severity: 'error', selector: 'div.hero', rule: 'overflow', value: '12px', source: 'css' },
+                    { severity: 'warm', selector: 'span', rule: 'note', value: 'x', source: 'probe' }
+                ]
+            };
+        }
+    });
+
+    const report = exportReport(bee, { format: 'json' });
+    const overflow = report.adapters[0].items.find((item) => item.rule === 'overflow');
+    assert.equal(overflow.value, '12px ×2');
+    assert.equal(report.adapters[0].items.filter((item) => item.rule === 'overflow').length, 1);
+    assert.equal(report.adapters[0].items.find((item) => item.rule === 'note').severity, 'warn');
+    assert.equal(report.logs.some((entry) => entry.level === 'warm'), true);
+    assert.equal(report.summary.error, 1);
+    assert.ok(report.summary.warn >= 2);
+    assert.ok(report.summary.ok >= 1);
+
+    const html = exportReport(bee, { format: 'html' });
+    assert.match(html, /12px ×2/);
+    bee.destroy();
+});
+
+test('il download si chiama report-AAAAMMGG-HHMM.html', () => {
+    const bee = makeCore();
+    bee.ui = { mounted: true, destroy() {} };
+    const links = [];
+    const previousDocument = globalThis.document;
+    const previousCreate = URL.createObjectURL;
+    const previousRevoke = URL.revokeObjectURL;
+    globalThis.document = {
+        body: {
+            appendChild(node) { links.push(node); },
+            removeChild() {}
+        },
+        createElement() {
+            const node = { href: '', download: '', rel: '', click() {}, remove() {} };
+            node.setAttribute = (name, value) => {
+                if (name === 'download') node.download = value;
+            };
+            return node;
+        }
+    };
+    URL.createObjectURL = () => 'blob:report';
+    URL.revokeObjectURL = () => {};
+
+    try {
+        const html = exportReport(bee, { format: 'html' });
+        assert.equal(typeof html, 'string');
+        assert.equal(links.length, 1);
+        assert.match(links[0].download, /^report-\d{8}-\d{4}\.html$/);
+    } finally {
+        if (previousCreate === undefined) delete URL.createObjectURL;
+        else URL.createObjectURL = previousCreate;
+        if (previousRevoke === undefined) delete URL.revokeObjectURL;
+        else URL.revokeObjectURL = previousRevoke;
+        if (previousDocument === undefined) delete globalThis.document;
+        else globalThis.document = previousDocument;
+        bee.destroy();
+    }
 });

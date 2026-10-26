@@ -74,11 +74,19 @@ export function isReportNoise(node) {
     while (current && typeof current === 'object') {
         if (seen.has(current)) break;
         seen.add(current);
-        if (current.id === 'wpadminbar') return true;
-        if (hasAbClass(current.className)) return true;
+        if (current.id === 'wpadminbar' || elementId(current) === 'wpadminbar') return true;
+        if (hasAbClass(classText(current))) return true;
         if (current.tagName === 'BEE-LADYBUG-OVERLAY') return true;
         if (hasBeeAttribute(current)) return true;
-        current = current.parentElement || null;
+        if (typeof current.closest === 'function') {
+            try {
+                const bar = current.closest('#wpadminbar');
+                if (bar) return true;
+            } catch {
+                /* closest is optional */
+            }
+        }
+        current = current.parentElement || (current.parentNode && current.parentNode.nodeType === 1 ? current.parentNode : null);
     }
 
     const style = readStyle(el);
@@ -103,7 +111,7 @@ function buildReport(core) {
     const series = readSeries(core);
     const latest = readLatest(core);
     const adapters = readAdapters(core);
-    const summary = countFindings(adapters);
+    const summary = countFindings(adapters, logs);
 
     return {
         version: state.version,
@@ -219,7 +227,7 @@ function readAdapters(core) {
         const list = result && Array.isArray(result.items) ? result.items : [];
         sections.push({
             name,
-            items: list.filter((row) => row && typeof row === 'object').map((row) => makeItem(row, name))
+            items: groupIdentical(list.filter((row) => row && typeof row === 'object').map((row) => makeItem(row, name)))
         });
     }
     return sections;
@@ -241,13 +249,44 @@ function makeItem(row, fallbackSource = '') {
 }
 
 /**
- * @param {Array<{ items: ReportItem[] }>} adapters
+ * Identical selector + rule + value collapse to one row. The count is part of the value.
+ * @param {ReportItem[]} items
+ * @returns {ReportItem[]}
  */
-function countFindings(adapters) {
+function groupIdentical(items) {
+    const order = [];
+    const map = new Map();
+    for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        const key = `${item.selector}\0${item.rule}\0${item.value}`;
+        const prev = map.get(key);
+        if (!prev) {
+            const row = { ...item, count: 1 };
+            map.set(key, row);
+            order.push(row);
+            continue;
+        }
+        prev.count += 1;
+    }
+    return order.map((row) => ({
+        severity: row.severity,
+        selector: row.selector,
+        rule: row.rule,
+        value: row.count > 1 ? `${row.value} ×${row.count}` : row.value,
+        source: row.source
+    }));
+}
+
+/**
+ * @param {Array<{ items: ReportItem[] }>} adapters
+ * @param {Array<{ type: string, level: string | null }>} logs
+ */
+function countFindings(adapters, logs) {
     const summary = { error: 0, warn: 0, ok: 0 };
     for (const section of adapters) {
         for (const item of section.items) summary[item.severity] += 1;
     }
+    for (let i = 0; i < logs.length; i++) summary[logSeverity(logs[i])] += 1;
     return summary;
 }
 
@@ -267,7 +306,7 @@ function normalizeFormat(format) {
 function normalizeSeverity(value) {
     const text = String(value || '').toLowerCase();
     if (text === 'error') return 'error';
-    if (text === 'warn' || text === 'warning') return 'warn';
+    if (text === 'warn' || text === 'warning' || text === 'warm') return 'warn';
     return 'ok';
 }
 
@@ -332,8 +371,10 @@ function csvCell(value) {
  * @returns {ReportSeverity}
  */
 function logSeverity(log) {
-    if (log.level === 'error' || log.type === 'error') return 'error';
-    if (log.level === 'warn' || log.type === 'warn') return 'warn';
+    const level = String(log.level || '').toLowerCase();
+    if (level === 'warn' || level === 'warning' || level === 'warm') return 'warn';
+    if (level === 'error' || log.type === 'error') return 'error';
+    if (log.type === 'warn') return 'warn';
     return 'ok';
 }
 
@@ -490,11 +531,22 @@ function saveIfMounted(core, report, ext, mime, text) {
     if (typeof document === 'undefined' || !document.body) return;
     if (typeof URL === 'undefined' || typeof URL.createObjectURL !== 'function' || typeof Blob === 'undefined') return;
 
-    const blob = new Blob([text], { type: `${mime};charset=utf-8` });
+    const filename = `report-${report.fileStamp}.${ext}`;
+    const type = `${mime};charset=utf-8`;
+    let blob;
+    try {
+        blob = typeof File === 'function'
+            ? new File([text], filename, { type })
+            : new Blob([text], { type });
+    } catch {
+        if (typeof Blob !== 'function') return;
+        blob = new Blob([text], { type });
+    }
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `report-${report.fileStamp}.${ext}`;
+    link.download = filename;
+    link.setAttribute('download', filename);
     link.rel = 'noopener';
     document.body.appendChild(link);
     link.click();
@@ -578,6 +630,34 @@ function escapeHtml(value) {
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;');
+}
+
+function classText(node) {
+    if (!node || typeof node !== 'object') return '';
+    const parts = [];
+    if (typeof node.className === 'string' && node.className) parts.push(node.className);
+    else if (node.className && typeof node.className === 'object' && 'baseVal' in node.className && node.className.baseVal) {
+        parts.push(String(node.className.baseVal));
+    }
+    if (node.classList && typeof node.classList.length === 'number') {
+        try {
+            parts.push([...node.classList].join(' '));
+        } catch {
+            /* classList may not be iterable */
+        }
+    }
+    if (typeof node.getAttribute === 'function') {
+        const attr = node.getAttribute('class');
+        if (attr) parts.push(attr);
+    }
+    return parts.join(' ');
+}
+
+function elementId(node) {
+    if (!node || typeof node !== 'object') return '';
+    if (typeof node.id === 'string' && node.id) return node.id;
+    if (typeof node.getAttribute === 'function') return node.getAttribute('id') || '';
+    return '';
 }
 
 /**

@@ -190,7 +190,7 @@ export class CanvasAdapter {
             severity: box.hit ? 'warn' : 'ok',
             selector: box.name,
             rule: 'hitbox',
-            value: `${box.x},${box.y} ${box.w}x${box.h}${box.hit ? ' colliding' : ''}`,
+            value: `${round1(box.x)},${round1(box.y)} ${round1(box.w)}x${round1(box.h)}${box.hit ? ' colliding' : ''}`,
             source: this.source
         }));
         const fps = this.#fpsItem();

@@ -148,7 +148,8 @@ test('snapshot elenca hitbox, collisioni e fps e si registra sul core', () => {
         entities: [
             { name: 'player', x: 0, y: 0, width: 10, height: 10 },
             { name: 'wall', x: 5, y: 0, width: 10, height: 10 },
-            { name: 'idle', x: 100, y: 100, width: 8, height: 8 }
+            { name: 'idle', x: 100, y: 100, width: 8, height: 8 },
+            { name: 'dot', x: 400.24, y: 500.25, width: 3.04, height: 4 }
         ]
     });
     adapter.attach();
@@ -163,6 +164,7 @@ test('snapshot elenca hitbox, collisioni e fps e si registra sul core', () => {
     assert.equal(before.items.find((item) => item.selector === 'player').severity, 'warn');
     assert.match(before.items.find((item) => item.selector === 'player').value, /0,0 10x10 colliding/);
     assert.equal(before.items.find((item) => item.selector === 'idle').severity, 'ok');
+    assert.equal(before.items.find((item) => item.selector === 'dot').value, '400.2,500.3 3x4');
 
     adapter.pump();
     adapter.pump();
