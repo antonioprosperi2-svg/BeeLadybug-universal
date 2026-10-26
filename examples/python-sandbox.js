@@ -3,7 +3,7 @@
  * Mock buttons use ingest() (same parser as the socket).
  * Connect talks to examples/python/sender.py
  */
-import { BeeLadybugCore, PythonBridge } from '../src/index.js';
+import { BeeLadybugCore, PythonBridge, exportReport } from '../src/index.js';
 
 const bee = new BeeLadybugCore();
 const bridge = new PythonBridge(bee, { url: 'ws://127.0.0.1:8765' });
@@ -52,6 +52,10 @@ document.getElementById('py-metric')?.addEventListener('click', () => {
     bridge.ingest({ type: 'metric', payload: { name: 'loss', value: Number(loss.toFixed(3)) } });
     bridge.ingest({ type: 'state', payload: { key: 'ai.status', value: 'mock-train' } });
 });
+document.getElementById('export-report')?.addEventListener('click', () => {
+    exportReport(bee, { format: 'html' });
+});
+
 document.getElementById('py-error')?.addEventListener('click', () => {
     bridge.ingest({
         type: 'error',

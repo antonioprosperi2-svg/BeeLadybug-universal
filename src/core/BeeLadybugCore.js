@@ -8,13 +8,15 @@
 
 import { UIOverlay } from './UIOverlay.js';
 import { buildAssistantSnapshot, normalizeAssistant } from './AiAssistant.js';
+import { exportReport as writeReport } from './ReportExporter.js';
 
-export const BEE_LADYBUG_VERSION = '0.5.4';
+export const BEE_LADYBUG_VERSION = '0.6.0';
 
 export const CORE_DEFAULTS = Object.freeze({
     toggleKey: 'F2',
     slowKey: 'F3',
     freezeKey: 'F4',
+    exportKey: 'F8',
     slowScale: 0.25,
     maxLogs: 250,
     historySize: 120,
@@ -61,6 +63,7 @@ export class BeeLadybugCore {
         this.toggleKey = cfg.toggleKey;
         this.slowKey = cfg.slowKey;
         this.freezeKey = cfg.freezeKey;
+        this.exportKey = cfg.exportKey;
         this.slowScale = cfg.slowScale;
         this.maxLogs = cfg.maxLogs;
         this.historySize = cfg.historySize;
@@ -560,6 +563,16 @@ export class BeeLadybugCore {
         return this;
     }
 
+    /**
+     * Build a telemetry report. HTML and CSV return a string; JSON returns
+     * the plain object. A mounted overlay downloads the file.
+     * @param {'html' | 'json' | 'csv'} [format]
+     * @returns {object | string}
+     */
+    exportReport(format = 'html') {
+        return writeReport(this, { format });
+    }
+
     applySlowMo() {
         if (this.frozen) this.unfreeze();
         const next = this.timeScale === this.slowScale ? 1 : this.slowScale;
@@ -771,6 +784,12 @@ export class BeeLadybugCore {
         if (code === this.toggleKey) {
             event.preventDefault();
             this.toggle();
+            return;
+        }
+
+        if (code === this.exportKey) {
+            event.preventDefault();
+            this.exportReport('html');
             return;
         }
 

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { afterEach, before, test } from 'node:test';
-import { BeeLadybugCore, BEE_LADYBUG_VERSION } from '../src/index.js';
+import { BeeLadybugCore, BEE_LADYBUG_VERSION, CORE_DEFAULTS } from '../src/index.js';
 
 function delay(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
@@ -32,6 +32,17 @@ before(() => {
 
 afterEach(() => {
     // ogni test distrugge la propria istanza
+});
+
+test('F8 export dal core restituisce JSON in headless', () => {
+    assert.equal(CORE_DEFAULTS.exportKey, 'F8');
+    const bee = makeCore();
+    assert.equal(bee.exportKey, 'F8');
+    assert.equal(bee.version, '0.6.0');
+    const report = bee.exportReport('json');
+    assert.equal(report.version, '0.6.0');
+    assert.equal(typeof bee.exportReport('html'), 'string');
+    bee.destroy();
 });
 
 test('boot headless: versione, visibilità, log di avvio', () => {

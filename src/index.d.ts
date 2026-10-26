@@ -67,6 +67,7 @@ export interface CoreOptions {
     toggleKey?: string;
     slowKey?: string;
     freezeKey?: string;
+    exportKey?: string;
     slowScale?: number;
     maxLogs?: number;
     historySize?: number;
@@ -208,6 +209,7 @@ export class BeeLadybugCore {
     toggleKey: string;
     slowKey: string;
     freezeKey: string;
+    exportKey: string;
     slowScale: number;
     maxLogs: number;
     historySize: number;
@@ -236,6 +238,8 @@ export class BeeLadybugCore {
     setTimeScale(scale: number): this;
     applySlowMo(): this;
     restoreRealtime(): this;
+    exportReport(format: 'json'): ReportDocument;
+    exportReport(format?: 'html' | 'csv'): string;
     getState(): CoreState;
     getLogs(): BeePacket[];
     getHistory(name: string): MetricHistory;

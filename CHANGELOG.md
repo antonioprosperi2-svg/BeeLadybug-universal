@@ -2,6 +2,12 @@
 <p align="center">
   <img src="https://beeenginejs.com/wp-content/uploads/2026/10/beeladybug-logo-animato-ezgif.com-effects.gif" alt="BeeEngine Logo" width="900" />
 </p>
+## 0.6.0
+
+- F8 and the overlay button **F8 EXPORT** download an HTML telemetry report. `exportReport()` also returns JSON and CSV.
+- Attached adapters add their own rows: canvas hitboxes and FPS, DOM layout, CSS hunt, hot mutation nodes, long tasks, slow resources, and the latest Python metrics.
+- A headless core returns the report and does not download a file.
+
 ## 0.5.4
 
 - CSS hunt walks ancestors and groups stacking contexts by cause, for example `div.hero creates stacking context (transform) - z-index of 3 children is trapped`. Idea from Rishabh Mishra.

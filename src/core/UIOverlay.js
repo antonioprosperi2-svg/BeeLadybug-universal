@@ -542,11 +542,12 @@ export class UIOverlay {
                   <button class="bl-btn" data-act="slow" type="button">F3 SLOW</button>
                   <button class="bl-btn" data-act="freeze" type="button">F4 STOP</button>
                   <button class="bl-btn" data-act="live" type="button">1x LIVE</button>
+                  <button class="bl-btn" data-act="export" type="button">F8 EXPORT</button>
                   <span class="bl-hotkeys" data-el="hotkeys"></span>
                   <button class="bl-btn" data-act="ask" type="button">ASK AI</button>
                   <span class="bl-providers" data-el="providers"></span>
                   <span class="bl-adapters" data-el="adapters"></span>
-                  <span class="bl-hint">F2 overlay</span>
+                  <span class="bl-hint">F2 overlay · F8 export</span>
                 </div>
               </div>
             </div>
@@ -581,6 +582,7 @@ export class UIOverlay {
             if (act === 'slow') this.core.applySlowMo();
             else if (act === 'freeze') this.core.toggleFreeze();
             else if (act === 'live') this.core.restoreRealtime();
+            else if (act === 'export') this.core.exportReport('html');
             else if (act === 'ask') this.core.ask();
             else if (act === 'assist') this.core.setActiveAssistant(btn.getAttribute('data-name'));
             else if (act === 'adapter') this.core.toggleAdapter(btn.getAttribute('data-name'));

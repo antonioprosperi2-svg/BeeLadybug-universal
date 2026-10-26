@@ -44,6 +44,16 @@
         }
         code { color: #ffd36a; }
         a { color: #6ee7ff; }
+        button {
+            background: #1e1e24;
+            color: #f1f2f6;
+            border: 1px solid #2f3542;
+            border-radius: 6px;
+            padding: 0.45rem 0.7rem;
+            font: inherit;
+            cursor: pointer;
+        }
+        button:hover { border-color: #ff4757; }
         .swatch { display: inline-block; width: 8px; height: 8px; margin: 0 4px 0 10px; }
         .swatch.ok { background: #3dff6a; }
         .swatch.hit { background: #ff3b3b; }
@@ -62,8 +72,11 @@
         </p>
         <canvas id="appCanvas" width="800" height="420"></canvas>
         <p class="hint">
+            <button id="export-report" type="button">Export report</button>
+        </p>
+        <p class="hint">
             Muovi il mouse sul canvas. <kbd>F2</kbd> overlay+hitbox ·
-            <kbd>F3</kbd> slow · <kbd>F4</kbd> freeze.
+            <kbd>F3</kbd> slow · <kbd>F4</kbd> freeze · <kbd>F8</kbd> export.
             Core puro: <a href="./examples/core.html">sandbox</a> ·
             DOM: <a href="./examples/dom.html">WebDOMAdapter</a> ·
             Python: <a href="./examples/python.html">PythonBridge</a> ·

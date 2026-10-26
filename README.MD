@@ -133,11 +133,25 @@ bee.subscribe((packet) => {
 | `F2` | mostra / nascondi overlay (e hitbox canvas) |
 | `F3` | slow-motion del tempo fittizio (`0.25x` / `1x`) |
 | `F4` | freeze / run del tempo fittizio |
+| `F8` | scarica il report HTML |
 | `F6` | CSS hunt, se `CSSAdapter` è attaccato |
 | `P` | blocca il pannello CSS sull'elemento corrente, solo con la hunt accesa |
 | `S` | scansione CSS, solo con la hunt accesa |
 
 Niente `F12`, niente tilde: sui layout italiani la tilde non è un tasto unico.
+
+## Export
+
+`F8`, il pulsante **F8 EXPORT** nel piede dell'overlay, o `exportReport()` scaricano `report-AAAAMMGG-HHMM.html`. Il file raccoglie log, serie e una sezione per ogni adapter attaccato. `json` e `csv` usano gli stessi dati.
+
+```js
+import { exportReport } from './src/index.js';
+
+exportReport(bee, { format: 'html' });
+bee.exportReport('json');
+```
+
+Con `ui: false`, o senza `document`, la chiamata restituisce la stringa o l'oggetto e non scarica nulla.
 
 ## CanvasAdapter
 
@@ -350,6 +364,7 @@ const bee = new BeeLadybugCore({
   toggleKey: 'F2',
   slowKey: 'F3',
   freezeKey: 'F4',
+  exportKey: 'F8',
   slowScale: 0.25,
   maxLogs: 250,
   historySize: 120,
@@ -368,6 +383,7 @@ bee.getHud();
 bee.show(); bee.hide(); bee.toggle();
 bee.freeze(); bee.unfreeze(); bee.toggleFreeze();
 bee.applySlowMo(); bee.restoreRealtime();
+bee.exportReport('html');
 bee.registerAssistant({ name: 'mock', complete: async ({ snapshot }) => 'ok' });
 bee.setActiveAssistant('mock');
 await bee.ask('why fps drop?');

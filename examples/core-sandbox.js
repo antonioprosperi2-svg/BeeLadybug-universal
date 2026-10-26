@@ -2,7 +2,7 @@
  * Core sandbox — proves BeeLadybug works with no Canvas adapter.
  * Three fake sources push raw packets through sendData().
  */
-import { BeeLadybugCore } from '../src/index.js';
+import { BeeLadybugCore, exportReport } from '../src/index.js';
 
 const bee = new BeeLadybugCore();
 window.bee = bee;
@@ -32,6 +32,7 @@ const fpsBtn = document.getElementById('inject-fps');
 const logBtn = document.getElementById('inject-log');
 const errBtn = document.getElementById('inject-error');
 const clearBtn = document.getElementById('clear-logs');
+const exportBtn = document.getElementById('export-report');
 
 fpsBtn?.addEventListener('click', () => {
     const value = 40 + Math.random() * 30;
@@ -53,6 +54,10 @@ errBtn?.addEventListener('click', () => {
 clearBtn?.addEventListener('click', () => {
     bee.sendData('clear', { channel: 'logs' });
     bee.sendData('log', { source: 'core', message: 'Console cleared.' });
+});
+
+exportBtn?.addEventListener('click', () => {
+    exportReport(bee, { format: 'html' });
 });
 
 let pointerX = 0;

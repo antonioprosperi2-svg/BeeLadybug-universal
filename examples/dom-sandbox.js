@@ -2,7 +2,7 @@
  * DOM sandbox — Core + WebDOMAdapter over a tiny fake page.
  * The page never talks to the overlay. The adapter watches hover, box model, mutations.
  */
-import { BeeLadybugCore, WebDOMAdapter, AntAdapter, SpiderAdapter } from '../src/index.js';
+import { BeeLadybugCore, WebDOMAdapter, AntAdapter, SpiderAdapter, exportReport } from '../src/index.js';
 
 const bee = new BeeLadybugCore();
 window.bee = bee;
@@ -14,6 +14,10 @@ const adapter = new WebDOMAdapter(bee, {
 });
 adapter.attach();
 window.adapter = adapter;
+
+document.getElementById('export-report')?.addEventListener('click', () => {
+    exportReport(bee, { format: 'html' });
+});
 
 const ant = new AntAdapter(bee, { root: stage, threshold: 30 });
 ant.attach();

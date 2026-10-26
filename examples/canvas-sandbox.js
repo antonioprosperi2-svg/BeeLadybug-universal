@@ -2,7 +2,7 @@
  * Canvas sandbox — Core + CanvasAdapter over a tiny host game.
  * The game never talks to the overlay. It only updates entities and calls pump().
  */
-import { BeeLadybugCore, CanvasAdapter } from '../src/index.js';
+import { BeeLadybugCore, CanvasAdapter, exportReport } from '../src/index.js';
 
 const canvas = document.getElementById('appCanvas');
 const ctx = canvas.getContext('2d');
@@ -18,6 +18,10 @@ window.bee = bee;
 const adapter = new CanvasAdapter(bee, { canvas, entities });
 adapter.attach();
 window.adapter = adapter;
+
+document.getElementById('export-report')?.addEventListener('click', () => {
+    exportReport(bee, { format: 'html' });
+});
 
 bee.registerAssistant({
     name: 'mock',
