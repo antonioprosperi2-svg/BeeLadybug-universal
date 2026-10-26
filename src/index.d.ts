@@ -108,12 +108,86 @@ export interface AssistantProvider {
     complete(input: { question: string; snapshot: AssistantSnapshot }): unknown;
 }
 
+export type ReportFormat = 'html' | 'json' | 'csv';
+export type ReportSeverity = 'error' | 'warn' | 'ok';
+
+export interface ReportItem {
+    severity: ReportSeverity;
+    selector: string;
+    rule: string;
+    value: string;
+    source: string;
+}
+
+export interface ReportSection {
+    name: string;
+    items: ReportItem[];
+}
+
+export interface ReportSeries {
+    name: string;
+    min: number;
+    max: number;
+    avg: number;
+    last: number;
+    samples: number[];
+}
+
+export interface ReportDocument {
+    version: string;
+    generatedAt: string;
+    fileStamp: string;
+    url: string;
+    viewport: { width: number; height: number } | null;
+    clock: {
+        wallTime: number;
+        simTime: number;
+        frame: number;
+        frozen: boolean;
+        timeScale: number;
+        coreFps: number;
+    };
+    summary: { error: number; warn: number; ok: number };
+    logs: Array<{
+        type: string;
+        level: LogLevel | null;
+        source: string;
+        message: string;
+        wallTime: number;
+        simTime: number;
+        frame: number;
+    }>;
+    series: ReportSeries[];
+    latest: BeePacket[];
+    adapters: ReportSection[];
+}
+
+export interface ReportSnapshotItem {
+    severity?: string;
+    selector?: string;
+    rule?: string;
+    value?: unknown;
+    source?: string;
+}
+
+export interface ReportSnapshot {
+    name?: string;
+    items?: ReportSnapshotItem[];
+}
+
+export interface AdapterSnapshotResult {
+    name: string;
+    result?: unknown;
+    error?: string;
+}
+
 export interface AdapterHooks {
     enable(): void;
     disable(): void;
     label?: string;
     hotkey?: string;
     enabled?: boolean;
+    snapshot?(): ReportSnapshot | null | undefined;
 }
 
 export interface AdapterInfo {
@@ -124,6 +198,10 @@ export interface AdapterInfo {
 }
 
 export function formatSimTime(ms: number): string;
+
+export function exportReport(core: BeeLadybugCore, options: { format: 'json' }): ReportDocument;
+export function exportReport(core: BeeLadybugCore, options?: { format?: 'html' | 'csv' }): string;
+export function isReportNoise(node: object | null | undefined): boolean;
 
 export class BeeLadybugCore {
     readonly version: string;
@@ -175,6 +253,7 @@ export class BeeLadybugCore {
     registerAdapter(name: string, hooks: AdapterHooks): this;
     unregisterAdapter(name: string): this;
     getAdapters(): AdapterInfo[];
+    collectSnapshots(): AdapterSnapshotResult[];
     toggleAdapter(name: string): this;
     setAdapterEnabled(name: string, enabled: boolean): this;
     publishDetail(items: DetailItem[]): this;

@@ -138,7 +138,7 @@ export class BeeLadybugCore {
     #detail;
     /** @type {Array<{ text: string, level?: string, onSelect?: () => void }>} */
     #issues;
-    /** @type {Map<string, { name: string, label: string, enabled: boolean, enable: Function, disable: Function }>} */
+    /** @type {Map<string, { name: string, label: string, hotkey: string, enabled: boolean, enable: Function, disable: Function, snapshot: Function | null }>} */
     #adapters;
 
     /**
@@ -295,7 +295,7 @@ export class BeeLadybugCore {
      * Register a toggleable diagnostic adapter. The core stores hooks only —
      * it does not import or special-case adapter modules.
      * @param {string} name
-     * @param {{ enable: () => void, disable: () => void, label?: string, hotkey?: string, enabled?: boolean }} hooks
+     * @param {{ enable: () => void, disable: () => void, label?: string, hotkey?: string, enabled?: boolean, snapshot?: () => { name?: string, items?: object[] } | null }} hooks
      */
     registerAdapter(name, hooks = {}) {
         const key = String(name || '').trim();
@@ -315,7 +315,8 @@ export class BeeLadybugCore {
             hotkey,
             enabled,
             enable: hooks.enable,
-            disable: hooks.disable
+            disable: hooks.disable,
+            snapshot: typeof hooks.snapshot === 'function' ? hooks.snapshot : null
         });
         this.sendData('sys', {
             op: 'adapter',
@@ -347,6 +348,30 @@ export class BeeLadybugCore {
             hotkey: entry.hotkey || '',
             enabled: entry.enabled
         }));
+    }
+
+    /**
+     * Ask every registered adapter for a report snapshot.
+     * Modules without a snapshot hook are skipped. The core does not read the rows.
+     * A thrown snapshot becomes `{ name, error }` so one module cannot abort the report.
+     * @returns {Array<{ name: string, result?: unknown, error?: string }>}
+     */
+    collectSnapshots() {
+        const out = [];
+        for (const entry of this.#adapters.values()) {
+            if (typeof entry.snapshot !== 'function') continue;
+            try {
+                const result = entry.snapshot();
+                if (result == null) continue;
+                out.push({ name: entry.name, result });
+            } catch (err) {
+                out.push({
+                    name: entry.name,
+                    error: err instanceof Error ? err.message : String(err)
+                });
+            }
+        }
+        return out;
     }
 
     /**
