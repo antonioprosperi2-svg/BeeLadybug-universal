@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { afterEach, before, test } from 'node:test';
-import { BeeLadybugCore, CanvasAdapter, CANVAS_ADAPTER_DEFAULTS } from '../src/index.js';
+import { BeeLadybugCore, CanvasAdapter, CANVAS_ADAPTER_DEFAULTS, exportReport } from '../src/index.js';
 
 function delay(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
@@ -136,6 +136,72 @@ test('pump() manuale resta valido senza autoPump', () => {
         bee.getLogs().some((packet) => String(packet.payload.message).includes('autoPump')),
         false
     );
+
+    adapter.detach();
+    bee.destroy();
+});
+
+test('snapshot elenca hitbox, collisioni e fps e si registra sul core', () => {
+    const bee = makeCore();
+    const adapter = new CanvasAdapter(bee, {
+        overlay: false,
+        entities: [
+            { name: 'player', x: 0, y: 0, width: 10, height: 10 },
+            { name: 'wall', x: 5, y: 0, width: 10, height: 10 },
+            { name: 'idle', x: 100, y: 100, width: 8, height: 8 }
+        ]
+    });
+    adapter.attach();
+
+    const listed = bee.getAdapters().find((entry) => entry.name === 'canvas');
+    assert.equal(listed.label, 'CANVAS');
+    assert.equal(listed.hotkey, '');
+    assert.equal(listed.enabled, true);
+
+    const before = adapter.snapshot();
+    assert.equal(before.items.some((item) => item.rule === 'fps'), false);
+    assert.equal(before.items.find((item) => item.selector === 'player').severity, 'warn');
+    assert.match(before.items.find((item) => item.selector === 'player').value, /0,0 10x10 colliding/);
+    assert.equal(before.items.find((item) => item.selector === 'idle').severity, 'ok');
+
+    adapter.pump();
+    adapter.pump();
+    const after = adapter.snapshot();
+    const fps = after.items.find((item) => item.rule === 'fps');
+    assert.equal(fps.selector, 'host');
+    assert.equal(fps.severity, 'ok');
+    assert.match(fps.value, /^min [\d.]+ avg [\d.]+ max [\d.]+$/);
+
+    const report = exportReport(bee, { format: 'json' });
+    const section = report.adapters.find((entry) => entry.name === 'canvas');
+    assert.equal(section.items.filter((item) => item.rule === 'hitbox' && item.severity === 'warn').length, 2);
+
+    bee.getHistory = () => ({ name: 'fps', values: [], min: 0, max: 0, avg: 0, last: 0 });
+    const fallback = adapter.snapshot().items.find((item) => item.rule === 'fps');
+    assert.match(fallback.value, /^min [\d.]+ avg [\d.]+ max [\d.]+$/);
+
+    adapter.detach();
+    assert.equal(adapter.snapshot(), null);
+    assert.equal(bee.collectSnapshots().length, 0);
+    bee.destroy();
+});
+
+test('il pulsante CANVAS ferma la telemetria e lo snapshot resta disponibile', () => {
+    const bee = makeCore();
+    const adapter = makeAdapter(bee);
+    adapter.attach();
+    adapter.pump();
+    adapter.pump();
+    const samples = bee.getHistory('entities').values.length;
+
+    bee.setAdapterEnabled('canvas', false);
+    adapter.pump();
+    assert.equal(bee.getHistory('entities').values.length, samples);
+    assert.equal(adapter.snapshot().items[0].selector, 'player');
+
+    bee.setAdapterEnabled('canvas', true);
+    adapter.pump();
+    assert.ok(bee.getHistory('entities').values.length > samples);
 
     adapter.detach();
     bee.destroy();

@@ -333,6 +333,7 @@ export class CanvasAdapter {
     setCanvas(canvas: HTMLCanvasElement | null): this;
     setEntities(entities: CanvasEntity[]): this;
     pump(ctx?: CanvasRenderingContext2D): this;
+    snapshot(): ReportSnapshot | null;
 }
 
 export interface WebDOMAdapterOptions {

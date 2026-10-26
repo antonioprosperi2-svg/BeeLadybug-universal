@@ -4,6 +4,7 @@
  * Reads generic AABB entities, measures host FPS, computes collisions,
  * and pushes packets into the core. Hitboxes are drawn on a stacked
  * overlay canvas so the game pixels stay untouched.
+ * `snapshot()` hands the report hitboxes, collisions, and FPS min/avg/max.
  *
  * The core must never import this file.
  *
@@ -59,6 +60,7 @@ export class CanvasAdapter {
         this.timeScale = 1;
 
         this.#attached = false;
+        this.#reporting = true;
         this.#overlay = null;
         this.#unsubscribe = null;
         this.#rafId = 0;
@@ -66,6 +68,7 @@ export class CanvasAdapter {
         this.#manualPumpWarned = false;
         this.#lastPump = 0;
         this.#fps = 0;
+        this.#fpsSamples = [];
         this.#wasColliding = new Set();
         this.#onResize = () => this.#syncOverlay();
         this.#onTick = () => {
@@ -80,6 +83,7 @@ export class CanvasAdapter {
     }
 
     #attached;
+    #reporting;
     #overlay;
     #unsubscribe;
     #rafId;
@@ -87,6 +91,7 @@ export class CanvasAdapter {
     #manualPumpWarned;
     #lastPump;
     #fps;
+    #fpsSamples;
     #wasColliding;
     #onResize;
     #onTick;
@@ -108,6 +113,15 @@ export class CanvasAdapter {
         }
         if (this.autoPump) this.startAutoPump();
 
+        this.#reporting = true;
+        this.core?.registerAdapter('canvas', {
+            label: 'CANVAS',
+            enabled: true,
+            enable: () => this.#enable(),
+            disable: () => this.#disable(),
+            snapshot: () => this.snapshot()
+        });
+
         this.core?.sendData('log', {
             source: this.source,
             message: `CanvasAdapter attached (${this.entities.length} entities).`
@@ -126,6 +140,7 @@ export class CanvasAdapter {
         this.#stopAutoPumpLoop();
         if (this.#unsubscribe) this.#unsubscribe();
         this.#unsubscribe = null;
+        this.core?.unregisterAdapter('canvas');
         this.#unmountOverlay();
         if (typeof window !== 'undefined') {
             window.removeEventListener('resize', this.#onResize);
@@ -162,6 +177,28 @@ export class CanvasAdapter {
     }
 
     /**
+     * Hitboxes currently on the entity list, plus FPS min/avg/max.
+     * Returns null when the adapter is not attached. The core stores this
+     * function and does not read the rows.
+     * @returns {{ name: string, items: Array<{ severity: string, selector: string, rule: string, value: string, source: string }> } | null}
+     */
+    snapshot() {
+        if (!this.#attached) return null;
+        const boxes = this.#collectBoxes();
+        this.#markCollisions(boxes);
+        const items = boxes.map((box) => ({
+            severity: box.hit ? 'warn' : 'ok',
+            selector: box.name,
+            rule: 'hitbox',
+            value: `${box.x},${box.y} ${box.w}x${box.h}${box.hit ? ' colliding' : ''}`,
+            source: this.source
+        }));
+        const fps = this.#fpsItem();
+        if (fps) items.push(fps);
+        return { name: 'canvas', items };
+    }
+
+    /**
      * Call once per host frame, after entity positions are updated.
      * Pass a 2D context only if overlay is disabled and you want hitboxes
      * drawn onto the game canvas itself.
@@ -174,6 +211,7 @@ export class CanvasAdapter {
             this.#warnManualPump();
             return this;
         }
+        if (!this.#reporting) return this;
 
         const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
         if (this.#lastPump) {
@@ -257,6 +295,8 @@ export class CanvasAdapter {
         if (!tracked && boxes[0]) tracked = boxes[0];
 
         if (this.#fps > 0) {
+            this.#fpsSamples.push(this.#fps);
+            if (this.#fpsSamples.length > 120) this.#fpsSamples.shift();
             this.core.sendData('fps', { value: this.#fps, source: this.source });
         }
         this.core.sendData('metric', {
@@ -374,7 +414,49 @@ export class CanvasAdapter {
         overlay.style.top = `${rect.top}px`;
         overlay.style.width = `${rect.width}px`;
         overlay.style.height = `${rect.height}px`;
-        overlay.style.display = this.core && this.core.visible === false ? 'none' : 'block';
+        const hidden = !this.#reporting || (this.core && this.core.visible === false);
+        overlay.style.display = hidden ? 'none' : 'block';
+    }
+
+    #enable() {
+        this.#reporting = true;
+        this.#syncOverlay();
+    }
+
+    #disable() {
+        this.#reporting = false;
+        this.#syncOverlay();
+    }
+
+    #fpsItem() {
+        const stats = this.#fpsStats();
+        if (!stats) return null;
+        return {
+            severity: 'ok',
+            selector: 'host',
+            rule: 'fps',
+            value: `min ${round1(stats.min)} avg ${round1(stats.avg)} max ${round1(stats.max)}`,
+            source: this.source
+        };
+    }
+
+    #fpsStats() {
+        const history = typeof this.core?.getHistory === 'function' ? this.core.getHistory('fps') : null;
+        if (history && Array.isArray(history.values) && history.values.length) {
+            return { min: history.min, avg: history.avg, max: history.max };
+        }
+        const samples = this.#fpsSamples;
+        if (!samples.length) return null;
+        let min = samples[0];
+        let max = samples[0];
+        let sum = 0;
+        for (let i = 0; i < samples.length; i++) {
+            const value = samples[i];
+            if (value < min) min = value;
+            if (value > max) max = value;
+            sum += value;
+        }
+        return { min, avg: sum / samples.length, max };
     }
 }
 
@@ -408,4 +490,8 @@ function isPrimary(entity) {
 function idFromKey(id) {
     const parts = String(id).split(':');
     return parts[parts.length - 1] || id;
+}
+
+function round1(value) {
+    return Math.round(Number(value) * 10) / 10;
 }
