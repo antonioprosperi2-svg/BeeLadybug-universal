@@ -334,6 +334,7 @@ export class CanvasAdapter {
     attach(): this;
     detach(): this;
     startAutoPump(): this;
+    stopAutoPump(): this;
     setCanvas(canvas: HTMLCanvasElement | null): this;
     setEntities(entities: CanvasEntity[]): this;
     pump(ctx?: CanvasRenderingContext2D): this;

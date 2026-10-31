@@ -70,6 +70,8 @@ export class CanvasAdapter {
         this.#fps = 0;
         this.#fpsSamples = [];
         this.#wasColliding = new Set();
+        this.#names = new Map();
+        this.#overlayStyle = null;
         this.#onResize = () => this.#syncOverlay();
         this.#onTick = () => {
             this.#rafId = requestAnimationFrame(this.#onTick);
@@ -93,6 +95,10 @@ export class CanvasAdapter {
     #fps;
     #fpsSamples;
     #wasColliding;
+    /** id -> display name, refreshed on every pump. */
+    #names;
+    /** Last style values written to the overlay. */
+    #overlayStyle;
     #onResize;
     #onTick;
 
@@ -126,6 +132,12 @@ export class CanvasAdapter {
             source: this.source,
             message: `CanvasAdapter attached (${this.entities.length} entities).`
         });
+        if (this.overlayEnabled && !this.canvas) {
+            this.core?.sendData('warn', {
+                source: this.source,
+                message: 'no canvas: hitboxes are not drawn. Pass { canvas } or call setCanvas().'
+            });
+        }
         this.core?.sendData('state', {
             source: this.source,
             key: 'adapter',
@@ -146,6 +158,11 @@ export class CanvasAdapter {
             window.removeEventListener('resize', this.#onResize);
             window.removeEventListener('scroll', this.#onResize, true);
         }
+        this.#wasColliding = new Set();
+        this.#names = new Map();
+        this.#lastPump = 0;
+        this.#fps = 0;
+        this.#fpsSamples = [];
         return this;
     }
 
@@ -163,10 +180,26 @@ export class CanvasAdapter {
         return this;
     }
 
+    /**
+     * Stop the internal loop and make a manual `pump()` valid again.
+     * Mirror of `startAutoPump()`.
+     */
+    stopAutoPump() {
+        this.autoPump = false;
+        this.#stopAutoPumpLoop();
+        return this;
+    }
+
     /** @param {HTMLCanvasElement | null} canvas */
     setCanvas(canvas) {
         this.canvas = canvas;
-        this.#syncOverlay();
+        if (!this.#attached) return this;
+        if (!canvas) {
+            this.#unmountOverlay();
+        } else if (this.overlayEnabled) {
+            if (this.#overlay) this.#syncOverlay();
+            else this.#mountOverlay();
+        }
         return this;
     }
 
@@ -327,7 +360,9 @@ export class CanvasAdapter {
 
     #emitCollisionEdges(boxes) {
         const now = new Set();
+        const names = new Map();
         for (let i = 0; i < boxes.length; i++) {
+            names.set(boxes[i].id, boxes[i].name);
             if (!boxes[i].hit) continue;
             now.add(boxes[i].id);
             if (!this.#wasColliding.has(boxes[i].id)) {
@@ -339,13 +374,14 @@ export class CanvasAdapter {
         }
         for (const id of this.#wasColliding) {
             if (now.has(id)) continue;
-            const name = idFromKey(id);
+            const name = names.get(id) ?? this.#names.get(id) ?? id;
             this.core.sendData('log', {
                 source: this.source,
                 message: `${name} left collision`
             });
         }
         this.#wasColliding = now;
+        this.#names = names;
     }
 
     #drawHitboxes(boxes, hostCtx) {
@@ -386,7 +422,7 @@ export class CanvasAdapter {
     }
 
     #mountOverlay() {
-        if (typeof document === 'undefined' || this.#overlay) return;
+        if (typeof document === 'undefined' || this.#overlay || !this.canvas) return;
         const canvas = document.createElement('canvas');
         canvas.setAttribute('data-bee-ladybug-canvas', '');
         canvas.style.pointerEvents = 'none';
@@ -395,12 +431,14 @@ export class CanvasAdapter {
         canvas.style.margin = '0';
         document.body.appendChild(canvas);
         this.#overlay = canvas;
+        this.#overlayStyle = null;
         this.#syncOverlay();
     }
 
     #unmountOverlay() {
         if (this.#overlay?.parentNode) this.#overlay.parentNode.removeChild(this.#overlay);
         this.#overlay = null;
+        this.#overlayStyle = null;
     }
 
     #syncOverlay() {
@@ -408,14 +446,22 @@ export class CanvasAdapter {
         const overlay = this.#overlay;
         if (!host || !overlay) return;
         const rect = host.getBoundingClientRect();
-        overlay.width = host.width;
-        overlay.height = host.height;
-        overlay.style.left = `${rect.left}px`;
-        overlay.style.top = `${rect.top}px`;
-        overlay.style.width = `${rect.width}px`;
-        overlay.style.height = `${rect.height}px`;
+        // Assigning width/height clears and reallocates the bitmap: only when they change.
+        if (overlay.width !== host.width) overlay.width = host.width;
+        if (overlay.height !== host.height) overlay.height = host.height;
         const hidden = !this.#reporting || (this.core && this.core.visible === false);
-        overlay.style.display = hidden ? 'none' : 'block';
+        const next = {
+            left: `${rect.left}px`,
+            top: `${rect.top}px`,
+            width: `${rect.width}px`,
+            height: `${rect.height}px`,
+            display: hidden ? 'none' : 'block'
+        };
+        const prev = this.#overlayStyle;
+        for (const key of Object.keys(next)) {
+            if (!prev || prev[key] !== next[key]) overlay.style[key] = next[key];
+        }
+        this.#overlayStyle = next;
     }
 
     #enable() {
@@ -485,11 +531,6 @@ function overlaps(a, b) {
 function isPrimary(entity) {
     const key = String(entity.name ?? entity.label ?? entity.role ?? '').toLowerCase();
     return key === 'player' || key === 'hero' || entity.primary === true;
-}
-
-function idFromKey(id) {
-    const parts = String(id).split(':');
-    return parts[parts.length - 1] || id;
 }
 
 function round1(value) {

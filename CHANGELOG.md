@@ -2,6 +2,14 @@
 <p align="center">
   <img src="https://beeenginejs.com/wp-content/uploads/2026/10/beeladybug-logo-animato-ezgif.com-effects.gif" alt="BeeEngine Logo" width="900" />
 </p>
+## 0.6.2
+
+- `CanvasAdapter`: "left collision" prints the entity name, also for entities with an `id` and names that contain `:`.
+- The hitbox overlay mounts only when a host canvas exists. Without one, `attach()` emits a single `warn` and `pump()` draws nothing while telemetry keeps running. `setCanvas(null)` unmounts the overlay.
+- The overlay resizes its bitmap and updates its style only when a value changes.
+- `detach()` resets collision state, FPS samples and timing, so a later `attach()` starts clean.
+- New `stopAutoPump()` stops the internal loop and makes a manual `pump()` valid again.
+
 ## 0.6.1
 
 - Identical report rows (selector, rule and value) collapse to one line with a `×N` count. Repeated errors count once in the summary.
