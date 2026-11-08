@@ -2,6 +2,15 @@
 <p align="center">
   <img src="https://beeenginejs.com/wp-content/uploads/2026/10/beeladybug-logo-animato-ezgif.com-effects.gif" alt="BeeEngine Logo" width="900" />
 </p>
+## 0.6.3
+
+- `WebDOMAdapter.setRoot()` disconnects the old observer, creates one when the adapter started with `root: null`, and clears `hover` when it falls outside the new root. `setRoot(null)` stops observing.
+- While the DOM button is off, mutations are not queued and no `mutate` warn or `mutations` metric is sent. Turning it off also cancels a pending flush.
+- `detach()` resets hover, FPS and mutation counters, so a later `attach()` starts clean. The overlay of a re-attached adapter is visible again.
+- The overlay resizes its bitmap and updates its style only when a value changes.
+- The HUD `display` state returns to `—` when the hover leaves a node.
+- `domNoiseQuiet` is exported from the package index and typed in `index.d.ts`.
+
 ## 0.6.2
 
 - `CanvasAdapter`: "left collision" prints the entity name, also for entities with an `id` and names that contain `:`.

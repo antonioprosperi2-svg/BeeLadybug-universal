@@ -17,6 +17,12 @@
 import { isReportNoise } from '../core/ReportExporter.js';
 
 const MAX_PROBLEM_ROWS = 40;
+const OBSERVE_OPTIONS = Object.freeze({
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ['class', 'style', 'hidden', 'disabled', 'open']
+});
 
 export const WEB_DOM_ADAPTER_DEFAULTS = Object.freeze({
     overlay: true,
@@ -74,6 +80,7 @@ export class WebDOMAdapter {
         this.#seenAttr = 0;
         this.#mutTimer = 0;
         this.#lastHoverKey = '';
+        this.#overlayStyle = null;
         this.#onMove = (event) => {
             this.#pointer.x = event.clientX;
             this.#pointer.y = event.clientY;
@@ -104,6 +111,8 @@ export class WebDOMAdapter {
     #seenAttr;
     #mutTimer;
     #lastHoverKey;
+    /** Last style values written to the overlay. */
+    #overlayStyle;
     #onMove;
     #onResize;
     #onTick;
@@ -118,6 +127,7 @@ export class WebDOMAdapter {
         if (this.core && typeof this.core.subscribe === 'function') {
             this.#unsubscribe = this.core.subscribe((packet) => this.#onCore(packet));
         }
+        this.#reporting = true;
         if (this.overlayEnabled) this.#mountOverlay();
         if (typeof window !== 'undefined') {
             window.addEventListener('mousemove', this.#onMove, true);
@@ -126,18 +136,12 @@ export class WebDOMAdapter {
         }
         if (this.root && typeof MutationObserver !== 'undefined') {
             this.#observer = new MutationObserver(this.#onMutate);
-            this.#observer.observe(this.root, {
-                childList: true,
-                subtree: true,
-                attributes: true,
-                attributeFilter: ['class', 'style', 'hidden', 'disabled', 'open']
-            });
+            this.#observer.observe(this.root, OBSERVE_OPTIONS);
         }
         if (this.autoTick && typeof requestAnimationFrame === 'function') {
             this.#rafId = requestAnimationFrame(this.#onTick);
         }
 
-        this.#reporting = true;
         this.core?.registerAdapter('dom', {
             label: 'DOM',
             enabled: true,
@@ -178,22 +182,39 @@ export class WebDOMAdapter {
             window.removeEventListener('scroll', this.#onResize, true);
         }
         this.#unmountOverlay();
+        this.hover = null;
+        this.#lastHoverKey = '';
+        this.#lastPump = 0;
+        this.#fps = 0;
+        this.#pointer = { x: 0, y: 0, dirty: false };
+        this.#mutAdded = 0;
+        this.#mutRemoved = 0;
+        this.#mutAttr = 0;
+        this.#seenAdded = 0;
+        this.#seenRemoved = 0;
+        this.#seenAttr = 0;
         return this;
     }
 
     /** @param {ParentNode | null} root */
     setRoot(root) {
         this.root = root;
-        if (this.#attached && this.#observer && root) {
-            this.#observer.disconnect();
-            this.#observer.observe(root, {
-                childList: true,
-                subtree: true,
-                attributes: true,
-                attributeFilter: ['class', 'style', 'hidden', 'disabled', 'open']
-            });
+        if (this.#observer) this.#observer.disconnect();
+        if (!root) {
+            this.#observer = null;
+        } else if (this.#attached && typeof MutationObserver !== 'undefined') {
+            if (!this.#observer) this.#observer = new MutationObserver(this.#onMutate);
+            this.#observer.observe(root, OBSERVE_OPTIONS);
         }
+        if (this.hover && !this.#rootHolds(this.hover)) this.hover = null;
         return this;
+    }
+
+    #rootHolds(node) {
+        const root = this.root;
+        if (!root) return false;
+        if (typeof document !== 'undefined' && root === document) return true;
+        return node === root || Boolean(root.contains?.(node));
     }
 
     /**
@@ -311,6 +332,7 @@ export class WebDOMAdapter {
                 this.#lastHoverKey = '';
                 this.core.sendData('state', { source: this.source, key: 'hover', value: '—' });
                 this.core.sendData('state', { source: this.source, key: 'box', value: '—' });
+                this.core.sendData('state', { source: this.source, key: 'display', value: '—' });
             }
             return;
         }
@@ -341,7 +363,7 @@ export class WebDOMAdapter {
     }
 
     #queueMutations(records) {
-        if (this.frozen) return;
+        if (this.frozen || !this.#reporting) return;
         for (let i = 0; i < records.length; i++) {
             const rec = records[i];
             if (isBeeChrome(rec.target)) continue;
@@ -433,12 +455,14 @@ export class WebDOMAdapter {
         canvas.style.margin = '0';
         document.body.appendChild(canvas);
         this.#overlay = canvas;
+        this.#overlayStyle = null;
         this.#syncOverlay();
     }
 
     #unmountOverlay() {
         if (this.#overlay?.parentNode) this.#overlay.parentNode.removeChild(this.#overlay);
         this.#overlay = null;
+        this.#overlayStyle = null;
     }
 
     #syncOverlay() {
@@ -447,12 +471,22 @@ export class WebDOMAdapter {
         const dpr = Math.min(window.devicePixelRatio || 1, 2);
         const w = window.innerWidth;
         const h = window.innerHeight;
-        canvas.style.width = `${w}px`;
-        canvas.style.height = `${h}px`;
-        canvas.width = Math.round(w * dpr);
-        canvas.height = Math.round(h * dpr);
+        // Assigning width/height clears and reallocates the bitmap: only when they change.
+        const bitmapW = Math.round(w * dpr);
+        const bitmapH = Math.round(h * dpr);
+        if (canvas.width !== bitmapW) canvas.width = bitmapW;
+        if (canvas.height !== bitmapH) canvas.height = bitmapH;
         const hidden = !this.#reporting || (this.core && this.core.visible === false);
-        canvas.style.display = hidden ? 'none' : 'block';
+        const next = {
+            width: `${w}px`,
+            height: `${h}px`,
+            display: hidden ? 'none' : 'block'
+        };
+        const prev = this.#overlayStyle;
+        for (const key of Object.keys(next)) {
+            if (!prev || prev[key] !== next[key]) canvas.style[key] = next[key];
+        }
+        this.#overlayStyle = next;
     }
 
     #enable() {
@@ -462,6 +496,11 @@ export class WebDOMAdapter {
 
     #disable() {
         this.#reporting = false;
+        if (this.#mutTimer && typeof clearTimeout === 'function') clearTimeout(this.#mutTimer);
+        this.#mutTimer = 0;
+        this.#mutAdded = 0;
+        this.#mutRemoved = 0;
+        this.#mutAttr = 0;
         this.#syncOverlay();
     }
 

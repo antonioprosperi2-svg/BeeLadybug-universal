@@ -356,6 +356,8 @@ export interface WebDOMAdapterOptions {
 
 export const WEB_DOM_ADAPTER_DEFAULTS: Required<Omit<WebDOMAdapterOptions, 'root'>>;
 
+export function domNoiseQuiet(cssEnabled: boolean, frozen: boolean, timeScale: number): boolean;
+
 export class WebDOMAdapter {
     core: BeeLadybugCore | null;
     root: ParentNode | null;
