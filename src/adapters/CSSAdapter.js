@@ -61,9 +61,13 @@ export class CSSAdapter {
         this.#hoverBox = null;
         this.#pinBox = null;
         this.#observer = null;
+        this.#unsubscribe = null;
+        this.#hasPointer = false;
         this.#onMove = (event) => {
+            if (this.core && this.core.visible === false) return;
             this.#x = event.clientX;
             this.#y = event.clientY;
+            this.#hasPointer = true;
             this.#schedule();
         };
         this.#onKey = (event) => this.#handleKey(event);
@@ -71,7 +75,7 @@ export class CSSAdapter {
         this.#onMutate = (records) => {
             if (!records.some(touchesSheet)) return;
             this.#sheetsDirty = true;
-            this.#schedule();
+            if (this.#hasPointer) this.#schedule();
         };
     }
 
@@ -92,6 +96,9 @@ export class CSSAdapter {
     #hoverBox;
     #pinBox;
     #observer;
+    #unsubscribe;
+    /** True after the first mousemove: before that (x, y) is not a real pointer. */
+    #hasPointer;
     #onMove;
     #onKey;
     #onScroll;
@@ -104,6 +111,9 @@ export class CSSAdapter {
     attach() {
         if (this.#attached) return this;
         this.#attached = true;
+        if (this.core && typeof this.core.subscribe === 'function') {
+            this.#unsubscribe = this.core.subscribe((packet) => this.#onCore(packet));
+        }
         this.core?.registerAdapter('css', {
             label: this.label,
             hotkey: this.hotkey,
@@ -128,8 +138,19 @@ export class CSSAdapter {
         if (!this.#attached) return this;
         this.#disable();
         this.#attached = false;
+        if (this.#unsubscribe) this.#unsubscribe();
+        this.#unsubscribe = null;
         this.core?.unregisterAdapter('css');
         return this;
+    }
+
+    #onCore(packet) {
+        if (packet.type !== 'sys' || packet.payload?.op !== 'visibility') return;
+        this.#placeBoxes();
+    }
+
+    #boxesVisible() {
+        return !(this.core && this.core.visible === false);
     }
 
     /** Page scan. Click a row to outline one element of that group. */
@@ -141,15 +162,15 @@ export class CSSAdapter {
         const rows = [];
         for (let i = 0; i < nodes.length; i++) {
             const el = nodes[i];
-            if (!el || isBeeChrome(el) || isSkippedTag(el)) continue;
+            if (!el || isBeeChrome(el) || isSkippedTag(el) || isReportNoise(el)) continue;
             const measured = measureViewportOverflow(el);
             if (measured) overflow.push(measured);
             const findings = [];
             pushNegativeMargins(el, findings);
             pushInvisible(el, findings);
-            pushBlockers(el, findings);
+            pushBlockers(el, findings, true);
             pushImage(el, findings);
-            pushStacking(el, findings);
+            pushStacking(el, findings, true);
             pushImportant(el, this.#rules, findings);
             for (let j = 0; j < findings.length; j++) {
                 rows.push({ el, selector: cssPath(el), ...findings[j] });
@@ -245,7 +266,9 @@ export class CSSAdapter {
         for (let i = 0; i < rows.length; i++) {
             const row = rows[i];
             if (describeCause(row.kind, row.selector)) {
-                causes = addCause(causes, { kind: row.kind, path: row.selector, el: row.el }, MAX_SNAPSHOT);
+                // No cap here: MAX_SNAPSHOT applies after the severity sort, so an info row
+                // can never push a real error out.
+                causes = addCause(causes, { kind: row.kind, path: row.selector, el: row.el }, Infinity);
             } else {
                 plain.push(row);
             }
@@ -319,6 +342,7 @@ export class CSSAdapter {
     #disable() {
         if (!this.#active) return;
         this.#active = false;
+        this.#hasPointer = false;
         if (typeof window !== 'undefined') {
             window.removeEventListener('mousemove', this.#onMove, true);
             window.removeEventListener('keydown', this.#onKey);
@@ -340,11 +364,16 @@ export class CSSAdapter {
         this.core?.publishDetail([]);
         this.core?.publishIssues([]);
         this.core?.sendData('state', { source: this.source, key: 'css.hunt', value: 'off' });
+        this.core?.sendData('state', { source: this.source, key: 'css.target', value: '—' });
+        this.core?.sendData('state', { source: this.source, key: 'css.hits', value: '0' });
+        this.core?.sendData('state', { source: this.source, key: 'css.pin', value: 'off' });
         this.core?.sendData('log', { source: this.source, message: 'CSS hunt off.' });
     }
 
     #handleKey(event) {
         if (!this.#active || event.repeat) return;
+        if (event.ctrlKey || event.metaKey || event.altKey) return;
+        if (this.core && this.core.visible === false) return;
         if (isTypingTarget(event.target)) return;
         if (event.code === this.pinKey) {
             event.preventDefault();
@@ -377,22 +406,23 @@ export class CSSAdapter {
 
     #inspect(x, y) {
         const el = pickElement(x, y);
-        placeBox(this.#hoverBox, el);
+        placeBox(this.#hoverBox, el, this.#boxesVisible());
         if (this.#panelLock) return;
         if (el === this.#lastEl) return;
         this.#lastEl = el;
         if (!el) {
             this.core?.publishDetail([]);
             this.core?.sendData('state', { source: this.source, key: 'css.target', value: '—' });
+            this.core?.sendData('state', { source: this.source, key: 'css.hits', value: '0' });
             return;
         }
         const findings = [];
         pushImportant(el, this.#rules, findings);
         pushOverflow(el, findings);
         pushInvisible(el, findings);
-        pushBlockers(el, findings);
+        pushBlockers(el, findings, true);
         pushImage(el, findings);
-        pushStacking(el, findings);
+        pushStacking(el, findings, true);
         const path = cssPath(el);
         this.core?.sendData('state', { source: this.source, key: 'css.target', value: path });
         this.core?.sendData('state', {
@@ -419,7 +449,7 @@ export class CSSAdapter {
         if (this.#panelLock) {
             this.#panelLock = false;
             this.#pinned = null;
-            placeBox(this.#pinBox, null);
+            placeBox(this.#pinBox, null, this.#boxesVisible());
             this.core?.sendData('state', { source: this.source, key: 'css.pin', value: 'off' });
             this.core?.sendData('log', { source: this.source, message: 'CSS pin off.' });
             this.#lastEl = null;
@@ -504,15 +534,16 @@ export class CSSAdapter {
 
     #pin(el) {
         this.#pinned = el;
-        placeBox(this.#pinBox, el);
+        placeBox(this.#pinBox, el, this.#boxesVisible());
         if (el && typeof el.scrollIntoView === 'function') {
             el.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'smooth' });
         }
     }
 
     #placeBoxes() {
-        placeBox(this.#hoverBox, this.#lastEl);
-        placeBox(this.#pinBox, this.#pinned);
+        const visible = this.#boxesVisible();
+        placeBox(this.#hoverBox, this.#lastEl, visible);
+        placeBox(this.#pinBox, this.#pinned, visible);
     }
 
     #mountBoxes() {
@@ -538,6 +569,8 @@ function collectImportantRules() {
     const sheets = document.styleSheets;
     for (let i = 0; i < sheets.length; i++) {
         const sheet = sheets[i];
+        if (sheet.disabled === true) continue;
+        if (sheet.media && sheet.media.mediaText && !mediaMatches(sheet.media.mediaText)) continue;
         let list = null;
         try {
             list = sheet.cssRules;
@@ -550,21 +583,21 @@ function collectImportantRules() {
     return { rules, unreadable };
 }
 
+function mediaMatches(mediaText) {
+    try {
+        return typeof matchMedia === 'function' ? matchMedia(mediaText).matches : true;
+    } catch {
+        return true;
+    }
+}
+
 function walkRules(list, source, into) {
     if (!list) return;
     for (let i = 0; i < list.length; i++) {
         const rule = list[i];
         if (!rule) continue;
         if (rule.type === 4 && rule.media) {
-            let active = true;
-            try {
-                active = typeof matchMedia === 'function'
-                    ? matchMedia(rule.media.mediaText).matches
-                    : true;
-            } catch {
-                active = true;
-            }
-            if (active) walkRules(rule.cssRules, source, into);
+            if (mediaMatches(rule.media.mediaText)) walkRules(rule.cssRules, source, into);
             continue;
         }
         if (rule.type === 1 && rule.selectorText && rule.style) {
@@ -745,7 +778,9 @@ function pushInvisible(el, findings) {
         findings.push(issue('invisible text (opacity 0)', ISSUE_RANK.invisible, 30));
     }
     const color = parseColor(style.color);
-    if (!color || color.a === 0) {
+    // Unknown syntax (oklch, lab, color(), color-mix): nothing to compare, nothing to report.
+    if (!color) return;
+    if (color.a === 0) {
         findings.push(issue('invisible text (transparent color)', ISSUE_RANK.invisible, 30));
         return;
     }
@@ -1096,7 +1131,7 @@ function pickElement(x, y) {
     const stack = document.elementsFromPoint(x, y);
     for (let i = 0; i < stack.length; i++) {
         const el = stack[i];
-        if (!el || isBeeChrome(el)) continue;
+        if (!el || isBeeChrome(el) || isReportNoise(el)) continue;
         if (el === document.documentElement || el === document.body) continue;
         return el;
     }
@@ -1154,10 +1189,14 @@ function hasOwnText(el) {
 function cssPath(el) {
     if (!el || !el.tagName) return 'node';
     const tag = el.tagName.toLowerCase();
-    if (el.id) return `${tag}#${el.id}`;
+    if (el.id) return `${tag}#${cssEscape(el.id)}`;
     const classes = el.classList ? [...el.classList].slice(0, 2) : [];
-    if (classes.length) return `${tag}.${classes.join('.')}`;
+    if (classes.length) return `${tag}.${classes.map(cssEscape).join('.')}`;
     return tag;
+}
+
+function cssEscape(value) {
+    return String(value).replace(/[^\w-]/g, '\\$&');
 }
 
 function isSkippedTag(el) {
@@ -1179,7 +1218,10 @@ function touchesSheet(record) {
         const name = record.target?.nodeName;
         return name === 'STYLE' || name === 'LINK';
     }
-    const nodes = [record.target];
+    // Only what was added or removed: the target's whole subtree always holds some <style> or <link>.
+    // A <style> that receives new text is the one target worth checking, and that check is O(1).
+    if (record.target?.nodeName === 'STYLE') return true;
+    const nodes = [];
     if (record.addedNodes) {
         for (let i = 0; i < record.addedNodes.length; i++) nodes.push(record.addedNodes[i]);
     }
@@ -1220,9 +1262,9 @@ function makeBox(kind, border, fill) {
     return node;
 }
 
-function placeBox(node, el) {
+function placeBox(node, el, visible = true) {
     if (!node) return;
-    if (!el || typeof el.getBoundingClientRect !== 'function' || isBeeChrome(el)) {
+    if (visible === false || !el || typeof el.getBoundingClientRect !== 'function' || isBeeChrome(el)) {
         node.style.display = 'none';
         return;
     }

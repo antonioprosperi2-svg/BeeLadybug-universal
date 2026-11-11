@@ -2,6 +2,19 @@
 <p align="center">
   <img src="https://beeenginejs.com/wp-content/uploads/2026/10/beeladybug-logo-animato-ezgif.com-effects.gif" alt="BeeEngine Logo" width="900" />
 </p>
+## 0.6.4
+
+- CSS hunt: Ctrl, Cmd and Alt combinations (Ctrl+S, Cmd+S, Ctrl+P) reach the browser. While the overlay is hidden (F2) the hunt ignores keys and pointer, and its hover and pin boxes disappear with it.
+- No inspection at (0,0) before the first mouse move.
+- `scan()`, hover and pin skip hidden nodes, the WordPress admin bar, and blockers or stacking ancestors that belong to it, like the report does.
+- Colors in modern syntax (`oklch()`, `lab()`, `color()`, `color-mix()`) are no longer reported as transparent text. Only a truly transparent color is.
+- Disabled stylesheets and stylesheets whose `media` does not match are skipped when looking for `!important`.
+- The report keeps every error: `MAX_SNAPSHOT` applies after the severity sort, so `will-change` hints cannot push a stacking error out.
+- A stylesheet mutation is detected from the nodes added or removed, not from the whole subtree of the target.
+- HUD states `css.target`, `css.hits` and `css.pin` reset when the hunt turns off, and `css.hits` resets when the pointer leaves every node.
+- `cssPath` escapes ids and class names.
+- `WebDOMAdapter`, `AntAdapter` and the report recognise the hunt boxes (`data-bee-ladybug-css`) as BeeLadybug chrome.
+
 ## 0.6.3
 
 - `WebDOMAdapter.setRoot()` disconnects the old observer, creates one when the adapter started with `root: null`, and clears `hover` when it falls outside the new root. `setRoot(null)` stops observing.

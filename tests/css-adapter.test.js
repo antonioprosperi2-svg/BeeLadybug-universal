@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { BeeLadybugCore, CSSAdapter, exportReport } from '../src/index.js';
+import { BeeLadybugCore, CSSAdapter, WebDOMAdapter, exportReport } from '../src/index.js';
 import { addCause, describeCause, formatCause, formatIssue, groupIssues, isDistortedImage, keepOverflowCauses, pushStickyIssue, rememberIssue, stackingReasons } from '../src/adapters/CSSAdapter.js';
 import { domNoiseQuiet } from '../src/adapters/WebDOMAdapter.js';
 
@@ -393,3 +393,432 @@ function computedStyle(el, pseudo) {
         }
     };
 }
+
+const RECT = { left: 12, top: 12, width: 40, height: 20, right: 52, bottom: 32 };
+
+function installCssDom({ nodes = [], stack = [], hit = () => null, styleSheets = [] } = {}) {
+    const keys = ['document', 'getComputedStyle', 'window', 'requestAnimationFrame', 'cancelAnimationFrame', 'matchMedia', 'MutationObserver'];
+    const previous = new Map(keys.map((key) => [key, globalThis[key]]));
+    const handlers = {};
+    const queue = new Map();
+    const observers = [];
+    const created = [];
+    let nextId = 1;
+
+    globalThis.getComputedStyle = (el, pseudo) => computedStyle(el, pseudo);
+    globalThis.window = {
+        innerWidth: 800,
+        innerHeight: 600,
+        addEventListener(type, fn) {
+            (handlers[type] ||= []).push(fn);
+        },
+        removeEventListener(type, fn) {
+            handlers[type] = (handlers[type] || []).filter((item) => item !== fn);
+        }
+    };
+    globalThis.requestAnimationFrame = (cb) => {
+        const id = nextId++;
+        queue.set(id, cb);
+        return id;
+    };
+    globalThis.cancelAnimationFrame = (id) => {
+        queue.delete(id);
+    };
+    globalThis.MutationObserver = class {
+        constructor(cb) {
+            this.cb = cb;
+            observers.push(this);
+        }
+        observe() {}
+        disconnect() {}
+    };
+    globalThis.document = {
+        documentElement: {
+            clientWidth: 800,
+            tagName: 'HTML',
+            nodeType: 1,
+            getBoundingClientRect() {
+                return { left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600 };
+            }
+        },
+        body: {
+            tagName: 'BODY',
+            nodeType: 1,
+            querySelectorAll() {
+                return nodes;
+            },
+            appendChild() {}
+        },
+        createElement() {
+            const node = { style: {}, setAttribute() {}, remove() {} };
+            created.push(node);
+            return node;
+        },
+        elementFromPoint: hit,
+        elementsFromPoint: () => stack,
+        styleSheets
+    };
+
+    return {
+        created,
+        observers,
+        pending: () => queue.size,
+        flush() {
+            for (const [id, cb] of [...queue]) {
+                queue.delete(id);
+                cb();
+            }
+        },
+        fire(type, event) {
+            for (const fn of (handlers[type] || []).slice()) fn(event);
+        },
+        key(code, extra = {}) {
+            return {
+                code,
+                repeat: false,
+                target: null,
+                ctrlKey: false,
+                metaKey: false,
+                altKey: false,
+                prevented: false,
+                preventDefault() { this.prevented = true; },
+                ...extra
+            };
+        },
+        restore() {
+            for (const [key, value] of previous) {
+                if (value === undefined) delete globalThis[key];
+                else globalThis[key] = value;
+            }
+        }
+    };
+}
+
+function watchStates(bee) {
+    const seen = [];
+    const off = bee.subscribe((packet) => {
+        if (packet.type === 'state') seen.push(packet.payload);
+    });
+    return { seen, off };
+}
+
+function valuesOf(seen, key) {
+    return seen.filter((payload) => payload.key === key).map((payload) => payload.value);
+}
+
+function importantRule(selector, property, value) {
+    return {
+        type: 1,
+        selectorText: selector,
+        style: {
+            length: 1,
+            item() { return property; },
+            getPropertyPriority() { return 'important'; },
+            getPropertyValue() { return value; }
+        }
+    };
+}
+
+function worded(id, text, color) {
+    const el = box('DIV', id, RECT, { color });
+    el.textContent = text;
+    return el;
+}
+
+test('Ctrl, Meta, Alt e overlay nascosto non attivano scan e pin', () => {
+    const card = box('DIV', 'card', { left: 10, top: 10, width: 100, height: 40, right: 110, bottom: 50 });
+    const dom = installCssDom({ nodes: [card], stack: [card], hit: () => card });
+    const bee = makeCore();
+    const css = new CSSAdapter(bee);
+    css.attach();
+    const states = watchStates(bee);
+    try {
+        bee.setAdapterEnabled('css', true);
+        assert.equal(css.active, true);
+        dom.fire('mousemove', { clientX: 20, clientY: 20 });
+        dom.flush();
+        assert.deepEqual(valuesOf(states.seen, 'css.target'), ['div#card']);
+        assert.equal(dom.created[0].style.display, 'block');
+
+        for (const [code, extra] of [['KeyS', { ctrlKey: true }], ['KeyS', { metaKey: true }], ['KeyP', { altKey: true }], ['KeyP', { ctrlKey: true }]]) {
+            const event = dom.key(code, extra);
+            dom.fire('keydown', event);
+            assert.equal(event.prevented, false, `${code} ${JSON.stringify(extra)} resta al browser`);
+        }
+        assert.deepEqual(valuesOf(states.seen, 'css.scan'), []);
+        assert.deepEqual(valuesOf(states.seen, 'css.pin'), []);
+
+        const scan = dom.key('KeyS');
+        dom.fire('keydown', scan);
+        assert.equal(scan.prevented, true);
+        assert.deepEqual(valuesOf(states.seen, 'css.scan'), ['0']);
+        dom.fire('mousemove', { clientX: 22, clientY: 22 });
+        dom.flush();
+        dom.fire('keydown', dom.key('KeyP'));
+        assert.deepEqual(valuesOf(states.seen, 'css.pin'), ['div#card']);
+
+        bee.hide();
+        assert.equal(dom.created[0].style.display, 'none', 'il box segue il nascondi del core');
+        assert.equal(dom.created[1].style.display, 'none');
+        const hiddenScan = dom.key('KeyS');
+        dom.fire('keydown', hiddenScan);
+        assert.equal(hiddenScan.prevented, false);
+        assert.deepEqual(valuesOf(states.seen, 'css.scan'), ['0']);
+        dom.fire('mousemove', { clientX: 30, clientY: 30 });
+        assert.equal(dom.pending(), 0, 'nessuna ispezione con overlay nascosto');
+
+        bee.show();
+        assert.equal(dom.created[0].style.display, 'block');
+
+        css.detach();
+        bee.hide();
+        bee.show();
+    } finally {
+        states.off();
+        dom.restore();
+        bee.destroy();
+    }
+});
+
+test('nessuna ispezione a (0,0) prima del primo mousemove e touchesSheet guarda solo i nodi toccati', () => {
+    const card = box('DIV', 'card', { left: 10, top: 10, width: 100, height: 40, right: 110, bottom: 50 });
+    const dom = installCssDom({ nodes: [card], stack: [card], hit: () => card });
+    const bee = makeCore();
+    const css = new CSSAdapter(bee);
+    css.attach();
+    try {
+        bee.setAdapterEnabled('css', true);
+        const sheetRecord = [{ type: 'attributes', target: { nodeName: 'LINK' } }];
+        dom.observers[0].cb(sheetRecord);
+        assert.equal(dom.pending(), 0, 'mutazione dei fogli prima del mouse');
+
+        dom.fire('mousemove', { clientX: 20, clientY: 20 });
+        dom.flush();
+        const container = {
+            nodeName: 'BODY',
+            nodeType: 1,
+            querySelector() { throw new Error('il sottoalbero del target non va ispezionato'); }
+        };
+        dom.observers[0].cb([{ type: 'childList', target: container, addedNodes: [], removedNodes: [] }]);
+        assert.equal(dom.pending(), 0, 'una mutazione dentro il body non invalida i fogli');
+
+        dom.observers[0].cb([{
+            type: 'childList',
+            target: container,
+            addedNodes: [{ nodeType: 1, nodeName: 'STYLE' }],
+            removedNodes: []
+        }]);
+        assert.equal(dom.pending(), 1, 'un <style> aggiunto invalida i fogli');
+        dom.flush();
+        dom.observers[0].cb([{ type: 'childList', target: { nodeName: 'STYLE', nodeType: 1 }, addedNodes: [], removedNodes: [] }]);
+        assert.equal(dom.pending(), 1, 'nuovo testo dentro un <style>');
+        dom.flush();
+
+        bee.setAdapterEnabled('css', false);
+        bee.setAdapterEnabled('css', true);
+        dom.observers[1].cb(sheetRecord);
+        assert.equal(dom.pending(), 0, 'il flag del puntatore si azzera con la caccia spenta');
+    } finally {
+        dom.restore();
+        bee.destroy();
+    }
+});
+
+test('scan salta #wpadminbar, nodi nascosti e blocchi della barra admin', () => {
+    const pull = box('DIV', 'pull', RECT, { marginLeft: '-8px' });
+    const admin = box('DIV', 'wpadminbar', { left: 0, top: 0, width: 800, height: 30, right: 800, bottom: 30 });
+    const toolbar = box('A', 'toolbar', { left: 300, top: 100, width: 40, height: 20, right: 340, bottom: 120 }, { marginLeft: '-8px' });
+    toolbar.parentElement = admin;
+    const secret = box('DIV', 'secret', RECT, { display: 'none', marginLeft: '-8px' });
+    const ghost = box('DIV', 'ghost', { left: 0, top: 0, width: 0, height: 20, right: 0, bottom: 20 }, { marginLeft: '-8px' });
+    const btn = box('BUTTON', 'btn', { left: 300, top: 100, width: 40, height: 20, right: 340, bottom: 120 });
+    const dom = installCssDom({
+        nodes: [pull, admin, toolbar, secret, ghost, btn],
+        hit: (x, y) => (x >= 300 && x <= 340 && y >= 100 && y <= 120 ? toolbar : null)
+    });
+    const bee = makeCore();
+    const css = new CSSAdapter(bee);
+    let detail = [];
+    bee.publishDetail = (items) => {
+        detail = items;
+        return bee;
+    };
+    css.attach();
+    try {
+        bee.setAdapterEnabled('css', true);
+        css.scan();
+        const texts = detail.map((item) => item.text);
+        assert.ok(texts.some((text) => text.startsWith('div#pull negative margin')), texts.join(' | '));
+        for (const name of ['toolbar', 'secret', 'ghost', 'wpadminbar']) {
+            assert.equal(texts.some((text) => text.includes(name)), false, name);
+        }
+        assert.equal(texts.some((text) => text.includes('click blocked')), false);
+    } finally {
+        dom.restore();
+        bee.destroy();
+    }
+});
+
+test('un colore in sintassi moderna non è testo invisibile, un colore trasparente sì', () => {
+    const nodes = [
+        worded('oklch', 'Hi', 'oklch(0.7 0.15 180)'),
+        worded('lab', 'Hi', 'lab(50% 40 59.5)'),
+        worded('srgb', 'Hi', 'color(srgb 1 0 0)'),
+        worded('mix', 'Hi', 'color-mix(in srgb, red 40%, blue)'),
+        worded('clear', 'Hi', 'transparent'),
+        worded('zero', 'Hi', 'rgba(0, 0, 0, 0)'),
+        worded('slash', 'Hi', 'rgb(0 0 0 / 0)'),
+        worded('plain', 'Hi', 'rgb(10, 20, 30)')
+    ];
+    const dom = installCssDom({ nodes });
+    const bee = makeCore();
+    const css = new CSSAdapter(bee);
+    css.attach();
+    try {
+        const rows = css.snapshot().items.filter((item) => item.rule === 'invisible text');
+        assert.deepEqual(rows.map((item) => item.selector).sort(), ['div#clear', 'div#slash', 'div#zero']);
+        for (const row of rows) assert.equal(row.value, 'invisible text (transparent color)');
+    } finally {
+        dom.restore();
+        bee.destroy();
+    }
+});
+
+test('fogli disabilitati o con media inattiva non entrano tra le !important', () => {
+    const hot = box('DIV', 'hot', RECT);
+    hot.matches = (selector) => selector === '.hot';
+    hot.classList = ['hot'];
+    hot.id = '';
+    const dom = installCssDom({
+        nodes: [hot],
+        styleSheets: [
+            { disabled: true, cssRules: [importantRule('.hot', 'color', 'red')] },
+            {
+                disabled: true,
+                href: 'https://cdn.example/off.css',
+                get cssRules() { throw new Error('cross-origin'); }
+            },
+            { media: { mediaText: 'print' }, cssRules: [importantRule('.hot', 'background', 'blue')] },
+            { media: { mediaText: 'screen' }, cssRules: [importantRule('.hot', 'border', 'none')] },
+            { media: { mediaText: '' }, cssRules: [importantRule('.hot', 'margin-top', '0')] }
+        ]
+    });
+    globalThis.matchMedia = (query) => ({ matches: query === 'screen' });
+    const bee = makeCore();
+    const css = new CSSAdapter(bee);
+    css.attach();
+    try {
+        const values = css.snapshot().items.filter((item) => item.rule === '!important').map((item) => item.value).sort();
+        assert.deepEqual(values, ['!important .hot { border: none }', '!important .hot { margin-top: 0 }']);
+        assert.equal(css.snapshot().items.some((item) => item.rule === 'unreadable sheet'), false);
+    } finally {
+        dom.restore();
+        bee.destroy();
+    }
+});
+
+test('snapshot tiene gli errori anche con molte cause will-change', () => {
+    const hero = box('DIV', 'hero', RECT, { transform: 'translateZ(0)' });
+    const trapped = box('SPAN', 'trapped', RECT, { zIndex: '3' });
+    trapped.parentElement = hero;
+    const nodes = [hero, trapped];
+    for (let i = 0; i < 100; i++) {
+        const layer = box('DIV', `hint${i}`, RECT, { willChange: 'opacity' });
+        const floater = box('SPAN', `floater${i}`, RECT, { zIndex: '4' });
+        floater.parentElement = layer;
+        nodes.push(layer, floater);
+    }
+    const dom = installCssDom({ nodes });
+    const bee = makeCore();
+    const css = new CSSAdapter(bee);
+    css.attach();
+    try {
+        const items = css.snapshot().items;
+        assert.equal(items.length, 80, 'taglio finale a MAX_SNAPSHOT');
+        assert.equal(items[0].rule, 'stacking context');
+        assert.equal(items[0].severity, 'error');
+        assert.equal(items.filter((item) => item.rule === 'will-change').length, 79);
+    } finally {
+        dom.restore();
+        bee.destroy();
+    }
+});
+
+test('disable azzera css.target, css.hits e css.pin', () => {
+    const card = box('DIV', 'card', { left: 10, top: 10, width: 100, height: 40, right: 110, bottom: 50 });
+    const dom = installCssDom({ nodes: [card], stack: [card], hit: () => card });
+    const bee = makeCore();
+    const css = new CSSAdapter(bee);
+    css.attach();
+    const states = watchStates(bee);
+    try {
+        bee.setAdapterEnabled('css', true);
+        dom.fire('mousemove', { clientX: 20, clientY: 20 });
+        dom.flush();
+        dom.fire('keydown', dom.key('KeyP'));
+        assert.deepEqual(valuesOf(states.seen, 'css.pin'), ['div#card']);
+
+        const mark = states.seen.length;
+        bee.setAdapterEnabled('css', false);
+        const after = states.seen.slice(mark);
+        assert.deepEqual(valuesOf(after, 'css.hunt'), ['off']);
+        assert.deepEqual(valuesOf(after, 'css.target'), ['—']);
+        assert.deepEqual(valuesOf(after, 'css.hits'), ['0']);
+        assert.deepEqual(valuesOf(after, 'css.pin'), ['off']);
+    } finally {
+        states.off();
+        dom.restore();
+        bee.destroy();
+    }
+});
+
+test('hover su nulla riporta css.hits a 0 e cssPath fa escape di id e classi', () => {
+    const odd = box('DIV', 'x:y', RECT, { marginLeft: '-8px' });
+    const klass = box('SPAN', '', RECT, { marginLeft: '-8px' });
+    klass.classList = ['a.b', 'c d', 'third'];
+    const stack = [odd];
+    const dom = installCssDom({ nodes: [odd, klass], stack });
+    const bee = makeCore();
+    const css = new CSSAdapter(bee);
+    css.attach();
+    const states = watchStates(bee);
+    try {
+        const selectors = css.snapshot().items.filter((item) => item.rule === 'negative margin').map((item) => item.selector).sort();
+        assert.deepEqual(selectors, ['div#x\\:y', 'span.a\\.b.c\\ d']);
+
+        bee.setAdapterEnabled('css', true);
+        dom.fire('mousemove', { clientX: 5, clientY: 5 });
+        dom.flush();
+        assert.deepEqual(valuesOf(states.seen, 'css.target'), ['div#x\\:y']);
+        assert.deepEqual(valuesOf(states.seen, 'css.hits'), ['1']);
+
+        stack.length = 0;
+        dom.fire('mousemove', { clientX: 6, clientY: 6 });
+        dom.flush();
+        assert.deepEqual(valuesOf(states.seen, 'css.target'), ['div#x\\:y', '—']);
+        assert.deepEqual(valuesOf(states.seen, 'css.hits'), ['1', '0']);
+    } finally {
+        states.off();
+        dom.restore();
+        bee.destroy();
+    }
+});
+
+test('WebDOMAdapter non sceglie i box della caccia CSS come hover', () => {
+    const chrome = box('DIV', 'chrome', RECT);
+    chrome.hasAttribute = (name) => name === 'data-bee-ladybug-css';
+    const card = box('DIV', 'card', RECT);
+    const dom = installCssDom({ nodes: [], stack: [chrome, card] });
+    const bee = makeCore();
+    const dom2 = new WebDOMAdapter(bee, { root: null, overlay: false, autoTick: false });
+    dom2.attach();
+    try {
+        dom.fire('mousemove', { clientX: 20, clientY: 20 });
+        dom2.pump();
+        assert.equal(dom2.hover, card);
+    } finally {
+        dom2.detach();
+        dom.restore();
+        bee.destroy();
+    }
+});

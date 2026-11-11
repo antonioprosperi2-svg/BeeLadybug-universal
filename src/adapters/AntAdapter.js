@@ -189,6 +189,7 @@ function isBeeChrome(node) {
         if (tag === 'BEE-LADYBUG-OVERLAY') return true;
         if (el.hasAttribute?.('data-bee-ladybug-dom')) return true;
         if (el.hasAttribute?.('data-bee-ladybug-canvas')) return true;
+        if (el.hasAttribute?.('data-bee-ladybug-css')) return true;
         el = el.parentElement;
     }
     return false;
