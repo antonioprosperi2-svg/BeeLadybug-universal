@@ -1,9 +1,13 @@
 
 # BeeLadybug
-
+![npm](https://img.shields.io/npm/v/bee-ladybug)
+![download](https://img.shields.io/npm/dm/bee-ladybug)
+![jsDelivr](https://img.shields.io/jsdelivr/npm/hm/bee-ladybug)
+![licenza](https://img.shields.io/npm/l/bee-ladybug)
 <p align="center">
   <img src="https://beeenginejs.com/wp-content/uploads/2026/10/beeladybug-logo-animato-ezgif.com-effects.gif" alt="BeeEngine Logo" width="900" />
 </p>
+
 
 Universal telemetry and visual inspection overlay.
 
