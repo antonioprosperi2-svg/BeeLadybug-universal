@@ -1,6 +1,6 @@
 
 # BeeLadybug
-![npm](https://img.shields.io/npm/v/bee-ladybug)
+![npm](https://img.shields.io/npm/v/bee-ladybug?color=blue)
 ![download](https://img.shields.io/npm/dm/bee-ladybug)
 ![jsDelivr](https://img.shields.io/jsdelivr/npm/hm/bee-ladybug)
 ![licenza](https://img.shields.io/npm/l/bee-ladybug)
