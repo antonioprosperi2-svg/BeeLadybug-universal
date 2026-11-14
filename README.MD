@@ -1,9 +1,14 @@
 
 # BeeLadybug
-![npm](https://img.shields.io/npm/v/bee-ladybug?color=blue)
-![download](https://img.shields.io/npm/dm/bee-ladybug)
-![jsDelivr](https://img.shields.io/jsdelivr/npm/hm/bee-ladybug)
+[![types](https://img.shields.io/npm/types/bee-ladybug)](https://www.npmjs.com/package/bee-ladybug)
+[![npm](https://img.shields.io/npm/v/bee-ladybug)](https://www.npmjs.com/package/bee-ladybug)
+[![download](https://img.shields.io/npm/dm/bee-ladybug)](https://www.npmjs.com/package/bee-ladybug)
+[![](https://data.jsdelivr.com/v1/package/npm/bee-ladybug/badge)](https://www.jsdelivr.com/package/npm/bee-ladybug)
 ![licenza](https://img.shields.io/npm/l/bee-ladybug)
+[![Socket Badge](https://badge.socket.dev/npm/package/bee-ladybug/0.6.4)](https://badge.socket.dev/npm/package/bee-ladybug/0.6.4)
+[![size](https://img.shields.io/bundlephobia/minzip/bee-ladybug)](https://bundlephobia.com/package/bee-ladybug)
+[![Snyk](https://snyk.io/test/npm/bee-ladybug/badge.svg)](https://security.snyk.io/package/npm/bee-ladybug)
+
 <p align="center">
   <img src="https://beeenginejs.com/wp-content/uploads/2026/10/beeladybug-logo-animato-ezgif.com-effects.gif" alt="BeeEngine Logo" width="900" />
 </p>
