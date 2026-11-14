@@ -2,6 +2,15 @@
 <p align="center">
   <img src="https://beeenginejs.com/wp-content/uploads/2026/10/beeladybug-logo-animato-ezgif.com-effects.gif" alt="BeeEngine Logo" width="900" />
 </p>
+## 0.6.5
+
+- `AntAdapter` live warns skip the same noise as the report: `#wpadminbar` and its children, hidden nodes and 0×0 boxes no longer raise "High Mutation Rate".
+- `characterData` records count on the parent element, so two text nodes in one element share one window and one warn.
+- Hot rows expire with their window. Above 40 rows the one with the fewest mutations goes first, not the oldest.
+- The selector escapes ids and class names, like `WebDOMAdapter`.
+- Without a root or `MutationObserver`, or when `observe()` throws, `attach()` sends one clear `warn` and does not claim to be watching.
+- New `setRoot(root)` restarts the counters on another root. `setRoot(null)` stops watching.
+
 ## 0.6.4
 
 - CSS hunt: Ctrl, Cmd and Alt combinations (Ctrl+S, Cmd+S, Ctrl+P) reach the browser. While the overlay is hidden (F2) the hunt ignores keys and pointer, and its hover and pin boxes disappear with it.

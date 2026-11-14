@@ -424,6 +424,7 @@ export class AntAdapter {
     constructor(core: BeeLadybugCore, options?: AntAdapterOptions);
     attach(): this;
     detach(): this;
+    setRoot(root: ParentNode | null): this;
     snapshot(): ReportSnapshot | null;
 }
 

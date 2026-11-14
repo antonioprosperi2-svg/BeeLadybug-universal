@@ -5,7 +5,7 @@
 [![download](https://img.shields.io/npm/dm/bee-ladybug)](https://www.npmjs.com/package/bee-ladybug)
 [![](https://data.jsdelivr.com/v1/package/npm/bee-ladybug/badge)](https://www.jsdelivr.com/package/npm/bee-ladybug)
 ![licenza](https://img.shields.io/npm/l/bee-ladybug)
-[![Socket Badge](https://badge.socket.dev/npm/package/bee-ladybug/0.6.4)](https://badge.socket.dev/npm/package/bee-ladybug/0.6.4)
+[![Socket Badge](https://badge.socket.dev/npm/package/bee-ladybug/0.6.5)](https://badge.socket.dev/npm/package/bee-ladybug/0.6.5)
 [![size](https://img.shields.io/bundlephobia/minzip/bee-ladybug)](https://bundlephobia.com/package/bee-ladybug)
 [![Snyk](https://snyk.io/test/npm/bee-ladybug/badge.svg)](https://security.snyk.io/package/npm/bee-ladybug)
 

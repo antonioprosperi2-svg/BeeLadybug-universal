@@ -38,6 +38,7 @@ export class AntAdapter {
         this.source = cfg.source;
 
         this.#attached = false;
+        this.#active = false;
         this.#observer = null;
         this.#counts = new WeakMap();
         this.#hot = [];
@@ -45,6 +46,8 @@ export class AntAdapter {
     }
 
     #attached;
+    /** False while the ANT button is off: setRoot() must not restart the observer then. */
+    #active;
     #observer;
     #counts;
     #hot;
@@ -53,17 +56,19 @@ export class AntAdapter {
     attach() {
         if (this.#attached) return this;
         this.#attached = true;
-        this.#enable();
+        this.#turnOn();
         this.core?.registerAdapter('ant', {
-            enable: () => this.#enable(),
+            enable: () => this.#turnOn(),
             disable: () => this.#disable(),
             label: 'ANT',
             snapshot: () => this.snapshot()
         });
-        this.core?.sendData('log', {
-            source: this.source,
-            message: 'AntAdapter attached. Watching DOM mutation rate.'
-        });
+        if (this.#observer) {
+            this.core?.sendData('log', {
+                source: this.source,
+                message: 'AntAdapter attached. Watching DOM mutation rate.'
+            });
+        }
         return this;
     }
 
@@ -72,6 +77,19 @@ export class AntAdapter {
         this.#attached = false;
         this.#disable();
         this.core?.unregisterAdapter('ant');
+        return this;
+    }
+
+    /**
+     * Watch another root. Counters and hot rows restart; `null` stops watching.
+     * @param {ParentNode | null} root
+     */
+    setRoot(root) {
+        this.root = root;
+        if (!this.#attached) return this;
+        this.#reset();
+        if (!root || !this.#active) return this;
+        this.#warnNotWatching(this.#observe());
         return this;
     }
 
@@ -99,49 +117,83 @@ export class AntAdapter {
         return { name: 'ant', items };
     }
 
-    #enable() {
-        if (!this.#attached || this.#observer) return;
-        if (typeof MutationObserver === 'undefined' || !this.root) return;
-        this.#counts = new WeakMap();
-        this.#observer = new MutationObserver(this.#onMutate);
-        try {
-            this.#observer.observe(this.root, {
-                childList: true,
-                subtree: true,
-                attributes: true,
-                characterData: true
-            });
-        } catch {
-            this.#observer.disconnect();
-            this.#observer = null;
-        }
+    #turnOn() {
+        if (!this.#attached) return;
+        this.#active = true;
+        this.#warnNotWatching(this.#observe());
     }
 
     #disable() {
+        this.#active = false;
+        this.#reset();
+    }
+
+    #reset() {
         if (this.#observer) this.#observer.disconnect();
         this.#observer = null;
         this.#counts = new WeakMap();
         this.#hot = [];
     }
 
+    /** @returns {'' | 'no-root' | 'no-observer' | 'failed'} why nothing is watched, empty when it is */
+    #observe() {
+        if (this.#observer) return '';
+        if (!this.root) return 'no-root';
+        if (typeof MutationObserver === 'undefined') return 'no-observer';
+        this.#counts = new WeakMap();
+        const observer = new MutationObserver(this.#onMutate);
+        try {
+            observer.observe(this.root, {
+                childList: true,
+                subtree: true,
+                attributes: true,
+                characterData: true
+            });
+        } catch {
+            observer.disconnect();
+            return 'failed';
+        }
+        this.#observer = observer;
+        return '';
+    }
+
+    #warnNotWatching(reason) {
+        if (!reason) return;
+        const messages = {
+            'no-root': 'no root: mutation rate is not watched. Pass { root } or call setRoot().',
+            'no-observer': 'MutationObserver is missing: mutation rate is not watched.',
+            failed: 'observe() failed: mutation rate is not watched.'
+        };
+        this.core?.sendData('warn', { source: this.source, message: messages[reason] });
+    }
+
     #ingest(records) {
         if (!this.#attached || !this.core || !records?.length) return;
         const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+        this.#prune(now);
+        // One layout read per element per batch, however many records it produced.
+        const skipped = new Map();
         for (let i = 0; i < records.length; i++) {
-            const node = records[i]?.target;
-            if (!node || isBeeChrome(node)) continue;
+            const el = elementOf(records[i]?.target);
+            if (!el) continue;
+            let skip = skipped.get(el);
+            if (skip === undefined) {
+                skip = isBeeChrome(el) || isReportNoise(el);
+                skipped.set(el, skip);
+            }
+            if (skip) continue;
 
-            let slot = this.#counts.get(node);
+            let slot = this.#counts.get(el);
             if (!slot || now - slot.windowStart >= this.windowMs) {
                 slot = { count: 0, windowStart: now, warned: false };
-                this.#counts.set(node, slot);
+                this.#counts.set(el, slot);
             }
             slot.count += 1;
-            this.#track(node, slot);
+            this.#track(el, slot);
             if (slot.count < this.threshold || slot.warned) continue;
 
             slot.warned = true;
-            const selector = nodeSelector(node);
+            const selector = nodeSelector(el);
             this.core.sendData('warn', {
                 source: this.source,
                 message: `High Mutation Rate on ${selector}`,
@@ -150,21 +202,36 @@ export class AntAdapter {
         }
     }
 
-    #track(node, slot) {
-        const index = this.#hot.findIndex((row) => row.node === node);
+    #prune(now) {
+        this.#hot = this.#hot.filter((row) => now - row.windowStart < this.windowMs);
+    }
+
+    #track(el, slot) {
+        const index = this.#hot.findIndex((row) => row.node === el);
         if (slot.count < this.threshold) {
             if (index >= 0) this.#hot.splice(index, 1);
             return;
         }
         const row = {
-            node,
-            selector: nodeSelector(node),
+            node: el,
+            selector: nodeSelector(el),
             count: slot.count,
             windowStart: slot.windowStart
         };
         if (index >= 0) this.#hot[index] = row;
         else this.#hot.push(row);
-        if (this.#hot.length > MAX_HOT) this.#hot.splice(0, this.#hot.length - MAX_HOT);
+        while (this.#hot.length > MAX_HOT) this.#hot.splice(this.#lowestRow(), 1);
+    }
+
+    /** Fewest mutations first; on a tie the older window goes. */
+    #lowestRow() {
+        let worst = 0;
+        for (let i = 1; i < this.#hot.length; i++) {
+            const row = this.#hot[i];
+            const low = this.#hot[worst];
+            if (row.count < low.count || (row.count === low.count && row.windowStart < low.windowStart)) worst = i;
+        }
+        return worst;
     }
 }
 
@@ -173,13 +240,24 @@ function positive(value, fallback) {
     return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
+/** A text node counts on its parent element, so one element keeps one window. */
+function elementOf(node) {
+    if (!node) return null;
+    if (node.nodeType === 1) return node;
+    return node.parentElement || null;
+}
+
 function nodeSelector(node) {
-    const el = node && node.nodeType === 1 ? node : node?.parentElement;
+    const el = elementOf(node);
     if (!el || !el.tagName) return 'node';
-    if (el.id) return `#${el.id}`;
+    if (el.id) return `#${cssEscape(el.id)}`;
     const cls = el.classList && el.classList[0];
-    if (cls) return `.${cls}`;
+    if (cls) return `.${cssEscape(cls)}`;
     return el.tagName.toLowerCase();
+}
+
+function cssEscape(value) {
+    return String(value).replace(/[^\w-]/g, '\\$&');
 }
 
 function isBeeChrome(node) {
