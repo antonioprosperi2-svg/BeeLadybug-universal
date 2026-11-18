@@ -2,6 +2,10 @@
 <p align="center">
   <img src="https://beeenginejs.com/wp-content/uploads/2026/10/beeladybug-logo-animato-ezgif.com-effects.gif" alt="BeeEngine Logo" width="900" />
 </p>
+## 0.6.7
+
+- The HUD panel can be dragged from its header and stays inside the screen. A header control collapses it to a pill with the ladybug mark and the FPS; clicking the pill opens the panel again. Position and that state are restored from localStorage with the other panel settings.
+
 ## 0.6.6
 
 - The HUD panel resizes (360px default, up to 90vw and 90vh), the EVENTS log grows with it, and a WIDE/COMPACT control next to LIVE switches between 360px and 680px. Width, height and that choice are restored from localStorage, and the FPS graph redraws when the panel changes size.

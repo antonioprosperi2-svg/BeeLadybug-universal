@@ -5,7 +5,7 @@
 [![download](https://img.shields.io/npm/dm/bee-ladybug)](https://www.npmjs.com/package/bee-ladybug)
 [![](https://data.jsdelivr.com/v1/package/npm/bee-ladybug/badge)](https://www.jsdelivr.com/package/npm/bee-ladybug)
 ![licenza](https://img.shields.io/npm/l/bee-ladybug)
-[![Socket Badge](https://badge.socket.dev/npm/package/bee-ladybug/0.6.6)](https://badge.socket.dev/npm/package/bee-ladybug/0.6.6)
+[![Socket Badge](https://badge.socket.dev/npm/package/bee-ladybug/0.6.7)](https://badge.socket.dev/npm/package/bee-ladybug/0.6.7)
 [![size](https://img.shields.io/bundlephobia/minzip/bee-ladybug)](https://bundlephobia.com/package/bee-ladybug)
 [![Snyk](https://snyk.io/test/npm/bee-ladybug/badge.svg)](https://security.snyk.io/package/npm/bee-ladybug)
 
@@ -23,7 +23,7 @@ dark console.
 
 > Il Core non sa cosa sta monitorando. Riceve solo dati grezzi.
 
-Versione attuale: **0.6.6** (`package.json` e `BEE_LADYBUG_VERSION`).
+Versione attuale: **0.6.7** (`package.json` e `BEE_LADYBUG_VERSION`).
 
 ## Perché questa struttura
 
@@ -365,7 +365,7 @@ npm login
 npm publish --access public
 ```
 
-Versione runtime e pacchetto: **0.6.6** (`BEE_LADYBUG_VERSION` e `package.json` devono restare uguali).
+Versione runtime e pacchetto: **0.6.7** (`BEE_LADYBUG_VERSION` e `package.json` devono restare uguali).
 
 ## Assistente AI (gancio, nessun vendor)
 
@@ -439,7 +439,7 @@ bee.destroy();
 
 ## Roadmap
 
-1. **0.6.6** — Core, adapter Canvas, DOM, CSS, Ant e Spider, PythonBridge, registro dei toggle, gancio AI multi-provider, export HTML/JSON/CSV, CSS hunt, pannello ridimensionabile con WIDE/COMPACT. È la versione in `package.json` e in `BEE_LADYBUG_VERSION`.
+1. **0.6.7** — Core, adapter Canvas, DOM, CSS, Ant e Spider, PythonBridge, registro dei toggle, gancio AI multi-provider, export HTML/JSON/CSV, CSS hunt, pannello ridimensionabile con WIDE/COMPACT, trascinabile dall'header e riducibile a una pillola con la coccinella e gli FPS. È la versione in `package.json` e in `BEE_LADYBUG_VERSION`.
 
 ## Come contribuire
 

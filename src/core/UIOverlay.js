@@ -75,6 +75,47 @@ const STYLES = `
   flex: 0 0 auto;
   padding: 10px 12px 8px;
   border-bottom: 1px solid rgba(255, 59, 78, 0.28);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.bl-head button {
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.bl-panel[data-dragging="true"] .bl-head {
+  cursor: grabbing;
+}
+.bl-panel[data-collapsed="true"] {
+  display: none;
+}
+.bl-pill {
+  pointer-events: auto;
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  margin: 0;
+  padding: 6px 12px 6px 8px;
+  border: 1px solid rgba(255, 59, 78, 0.7);
+  border-radius: 999px;
+  background: rgba(7, 8, 12, 0.94);
+  color: #e9edf5;
+  font: 700 11px ui-monospace, Consolas, monospace;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+}
+.bl-pill[hidden] {
+  display: none;
+}
+.bl-pill[data-dragging="true"] {
+  cursor: grabbing;
 }
 .bl-mark {
   width: 14px;
@@ -494,9 +535,17 @@ export class UIOverlay {
         this.#flashAt = new Map();
         this.#flashTimers = new Map();
         this.#wide = false;
+        this.#pill = false;
         this.#layoutHeight = null;
+        this.#layoutWidth = null;
+        this.#layoutLeft = null;
+        this.#layoutTop = null;
+        this.#drag = null;
         this.#panelObserver = null;
         this.#saveTimer = 0;
+        this.#onPointerMove = (event) => this.#pointerMove(event);
+        this.#onPointerUp = (event) => this.#pointerUp(event);
+        this.#onViewport = () => this.#clampVisible(true);
     }
 
     #host;
@@ -515,9 +564,17 @@ export class UIOverlay {
     #flashAt;
     #flashTimers;
     #wide;
+    #pill;
     #layoutHeight;
+    #layoutWidth;
+    #layoutLeft;
+    #layoutTop;
+    #drag;
     #panelObserver;
     #saveTimer;
+    #onPointerMove;
+    #onPointerUp;
+    #onViewport;
 
     /** @param {'auto' | HTMLElement} [target] */
     mount(target = 'auto') {
@@ -538,6 +595,10 @@ export class UIOverlay {
         this.#root.innerHTML = `
             <style>${STYLES}</style>
             <div class="bl-root" data-visible="true">
+              <button class="bl-pill" data-el="pill" type="button" hidden aria-label="Open BeeLadybug panel">
+                <span class="bl-mark" aria-hidden="true"></span>
+                <span data-el="pillFps">—</span>
+              </button>
               <div class="bl-panel">
                 <div class="bl-scan"></div>
                 <div class="bl-head">
@@ -547,6 +608,7 @@ export class UIOverlay {
                   <span class="bl-mode-wrap">
                     <span class="bl-mode" data-el="mode">LIVE</span>
                     <button class="bl-size" data-el="wide" type="button" aria-pressed="false" aria-label="Wide panel">WIDE</button>
+                    <button class="bl-size" data-el="pillToggle" type="button" aria-pressed="false" aria-label="Reduce to a pill">PILL</button>
                     <button class="bl-info" type="button" aria-describedby="bl-freeze-tip" aria-label="Freeze stops the simulated clock, not this overlay">
                       <span aria-hidden="true">ⓘ</span>
                       <span class="bl-info-tip" id="bl-freeze-tip">Freeze does not stop this overlay. It only stops the simulated clock. Adapters must listen for the sys event (op: freeze).</span>
@@ -633,10 +695,14 @@ export class UIOverlay {
             adapters: this.#root.querySelector('[data-el="adapters"]'),
             hotkeys: this.#root.querySelector('[data-el="hotkeys"]'),
             panel: this.#root.querySelector('.bl-panel'),
-            wide: this.#root.querySelector('[data-el="wide"]')
+            wide: this.#root.querySelector('[data-el="wide"]'),
+            pill: this.#root.querySelector('[data-el="pill"]'),
+            pillFps: this.#root.querySelector('[data-el="pillFps"]'),
+            pillToggle: this.#root.querySelector('[data-el="pillToggle"]')
         };
 
         this.#els.wide?.addEventListener('click', () => this.#toggleWide());
+        this.#els.pillToggle?.addEventListener('click', () => this.#setPill(true));
 
         this.#root.querySelector('.bl-foot').addEventListener('click', (event) => {
             const btn = event.target.closest('[data-act]');
@@ -702,6 +768,10 @@ export class UIOverlay {
         this.#restoreLayout();
         node.appendChild(this.#host);
         this.#mounted = true;
+        this.#applyChrome();
+        this.#clampVisible(false);
+        this.#bindDrag();
+        this.#watchViewport();
         this.#watchPanel();
         this.setVisible(this.core.visible);
         this.#replayLogs();
@@ -710,6 +780,8 @@ export class UIOverlay {
     }
 
     unmount() {
+        this.#stopDrag();
+        this.#watchViewport(false);
         this.#stopPanelWatch();
         if (this.#host?.parentNode) this.#host.parentNode.removeChild(this.#host);
         this.#host = null;
@@ -726,7 +798,11 @@ export class UIOverlay {
         this.#clearFlashTimers();
         this.#flashAt.clear();
         this.#wide = false;
+        this.#pill = false;
         this.#layoutHeight = null;
+        this.#layoutWidth = null;
+        this.#layoutLeft = null;
+        this.#layoutTop = null;
         return this;
     }
 
@@ -846,6 +922,10 @@ export class UIOverlay {
         this.#els.mode.dataset.mode = state.mode;
         this.#els.hostFps.textContent = host.values.length ? host.last.toFixed(1) : '—';
         this.#els.coreFps.textContent = state.coreFps.toFixed(1);
+        if (this.#els.pillFps) {
+            const fps = host.values.length ? host.last : state.coreFps;
+            this.#els.pillFps.textContent = Number.isFinite(fps) ? `${fps.toFixed(1)} fps` : '—';
+        }
         this.#els.frame.textContent = String(state.frameCount);
         this.#els.sim.textContent = formatSimTime(state.simTime);
 
@@ -1009,6 +1089,7 @@ export class UIOverlay {
         this.#wide = !this.#wide;
         const width = Math.min(this.#wide ? PANEL_WIDE : PANEL_COMPACT, this.#widthCap());
         panel.style.width = `${Math.round(width)}px`;
+        this.#layoutWidth = Math.round(width);
         this.#syncWideButton();
         this.#rememberLayout();
         if (this.core) this.#paintGraph(this.core.getPrimaryHistory());
@@ -1035,13 +1116,26 @@ export class UIOverlay {
         if (!Number.isFinite(width)) width = this.#wide ? PANEL_WIDE : PANEL_COMPACT;
         width = Math.min(Math.max(width, PANEL_MIN_W), this.#widthCap());
         panel.style.width = `${Math.round(width)}px`;
+        this.#layoutWidth = Math.round(width);
         const height = Number(saved.height);
         if (Number.isFinite(height) && height >= 120) {
             const next = Math.min(height, this.#heightCap());
             panel.style.height = `${Math.round(next)}px`;
             this.#layoutHeight = Math.round(next);
         }
+        const left = Number(saved.left);
+        const top = Number(saved.top);
+        if (Number.isFinite(left)) {
+            panel.style.left = `${Math.round(left)}px`;
+            this.#layoutLeft = Math.round(left);
+        }
+        if (Number.isFinite(top)) {
+            panel.style.top = `${Math.round(top)}px`;
+            this.#layoutTop = Math.round(top);
+        }
+        this.#pill = saved.pill === true;
         this.#syncWideButton();
+        this.#syncPillButton();
     }
 
     #watchPanel() {
@@ -1088,12 +1182,25 @@ export class UIOverlay {
     #rememberLayout() {
         const panel = this.#els?.panel;
         if (!panel || !panel.isConnected) return;
-        const rect = panel.getBoundingClientRect();
-        if (rect.width < 80) return;
+        let width = this.#layoutWidth;
+        if (!this.#pill) {
+            const rect = panel.getBoundingClientRect();
+            if (rect.width >= 80) {
+                width = Math.round(rect.width);
+                this.#layoutWidth = width;
+            }
+            const offset = this.#offsetOf(panel);
+            this.#layoutLeft = Math.round(offset.left);
+            this.#layoutTop = Math.round(offset.top);
+        }
+        if (!(width >= 80)) return;
         const data = {
-            width: Math.round(rect.width),
+            width: Math.round(width),
             height: this.#layoutHeight,
-            wide: this.#wide === true
+            wide: this.#wide === true,
+            left: Number.isFinite(this.#layoutLeft) ? this.#layoutLeft : 12,
+            top: Number.isFinite(this.#layoutTop) ? this.#layoutTop : 12,
+            pill: this.#pill === true
         };
         try {
             if (typeof localStorage === 'undefined') return;
@@ -1115,12 +1222,167 @@ export class UIOverlay {
         return Math.max(160, Math.floor(view * 0.9));
     }
 
+    #bindDrag() {
+        const head = this.#root?.querySelector('.bl-head');
+        head?.addEventListener('pointerdown', (event) => this.#pointerDown(event, head, false));
+        this.#els?.pill?.addEventListener('pointerdown', (event) => this.#pointerDown(event, this.#els.pill, true));
+    }
+
+    #pointerDown(event, handle, fromPill) {
+        if (!handle || (event.button != null && event.button !== 0)) return;
+        if (!fromPill && event.target.closest('button')) return;
+        const el = fromPill ? this.#els?.pill : this.#els?.panel;
+        if (!el) return;
+        event.preventDefault();
+        const origin = this.#offsetOf(el);
+        this.#drag = {
+            id: event.pointerId,
+            x: event.clientX,
+            y: event.clientY,
+            left: origin.left,
+            top: origin.top,
+            moved: false,
+            fromPill,
+            handle
+        };
+        el.dataset.dragging = 'true';
+        try {
+            handle.setPointerCapture(event.pointerId);
+        } catch {
+            /* capture is optional; move events still arrive while the pointer stays down */
+        }
+        handle.addEventListener('pointermove', this.#onPointerMove);
+        handle.addEventListener('pointerup', this.#onPointerUp);
+        handle.addEventListener('pointercancel', this.#onPointerUp);
+    }
+
+    #pointerMove(event) {
+        const drag = this.#drag;
+        if (!drag || event.pointerId !== drag.id) return;
+        const dx = event.clientX - drag.x;
+        const dy = event.clientY - drag.y;
+        if (Math.hypot(dx, dy) <= 10) return;
+        drag.moved = true;
+        const el = drag.fromPill ? this.#els?.pill : this.#els?.panel;
+        if (!el) return;
+        this.#moveEl(el, drag.left + dx, drag.top + dy);
+    }
+
+    #pointerUp(event) {
+        const drag = this.#drag;
+        if (!drag || event.pointerId !== drag.id) return;
+        const reopen = event.type === 'pointerup' && drag.fromPill && !drag.moved;
+        this.#stopDrag();
+        this.#rememberLayout();
+        if (reopen) this.#setPill(false);
+    }
+
+    #stopDrag() {
+        const drag = this.#drag;
+        if (drag?.handle) {
+            drag.handle.removeEventListener('pointermove', this.#onPointerMove);
+            drag.handle.removeEventListener('pointerup', this.#onPointerUp);
+            drag.handle.removeEventListener('pointercancel', this.#onPointerUp);
+        }
+        this.#drag = null;
+        if (this.#els?.panel) delete this.#els.panel.dataset.dragging;
+        if (this.#els?.pill) delete this.#els.pill.dataset.dragging;
+    }
+
+    #watchViewport(on = true) {
+        if (typeof window === 'undefined') return;
+        window.removeEventListener('resize', this.#onViewport);
+        if (on) window.addEventListener('resize', this.#onViewport);
+    }
+
+    #setPill(on) {
+        const panel = this.#els?.panel;
+        if (!panel) return;
+        if (on && !this.#pill) {
+            const rect = panel.getBoundingClientRect();
+            if (rect.width >= 80) this.#layoutWidth = Math.round(rect.width);
+            const offset = this.#offsetOf(panel);
+            this.#layoutLeft = Math.round(offset.left);
+            this.#layoutTop = Math.round(offset.top);
+        }
+        this.#pill = on === true;
+        this.#applyChrome();
+        const el = this.#pill ? this.#els.pill : panel;
+        const left = Number.isFinite(this.#layoutLeft) ? this.#layoutLeft : 12;
+        const top = Number.isFinite(this.#layoutTop) ? this.#layoutTop : 12;
+        this.#moveEl(el, left, top);
+        this.#syncPillButton();
+        this.#rememberLayout();
+        if (!this.#pill && this.core) this.#paintGraph(this.core.getPrimaryHistory());
+    }
+
+    #applyChrome() {
+        const panel = this.#els?.panel;
+        const pill = this.#els?.pill;
+        if (panel) panel.dataset.collapsed = this.#pill ? 'true' : 'false';
+        if (pill) pill.hidden = !this.#pill;
+        this.#syncPillButton();
+    }
+
+    #syncPillButton() {
+        const btn = this.#els?.pillToggle;
+        if (!btn) return;
+        btn.setAttribute('aria-pressed', this.#pill ? 'true' : 'false');
+    }
+
+    #clampVisible(save) {
+        const el = this.#pill ? this.#els?.pill : this.#els?.panel;
+        if (!el || el.hidden) return;
+        const offset = this.#offsetOf(el);
+        const left = Number.isFinite(this.#layoutLeft) ? this.#layoutLeft : offset.left;
+        const top = Number.isFinite(this.#layoutTop) ? this.#layoutTop : offset.top;
+        this.#moveEl(el, left, top);
+        if (save) this.#queueLayoutSave();
+    }
+
+    #offsetOf(el) {
+        const left = parseFloat(el.style.left);
+        const top = parseFloat(el.style.top);
+        if (Number.isFinite(left) && Number.isFinite(top)) return { left, top };
+        const rect = el.getBoundingClientRect();
+        return { left: rect.left, top: rect.top };
+    }
+
+    #moveEl(el, left, top) {
+        if (!el) return;
+        const rect = el.getBoundingClientRect();
+        const width = rect.width || el.offsetWidth;
+        const height = rect.height || el.offsetHeight;
+        let x = left;
+        let y = top;
+        if (width >= 2 && height >= 2 && typeof window !== 'undefined') {
+            const maxL = Math.max(0, window.innerWidth - width);
+            const maxT = Math.max(0, window.innerHeight - height);
+            x = Math.min(maxL, Math.max(0, left));
+            y = Math.min(maxT, Math.max(0, top));
+        }
+        x = Math.round(x);
+        y = Math.round(y);
+        el.style.left = `${x}px`;
+        el.style.top = `${y}px`;
+        this.#layoutLeft = x;
+        this.#layoutTop = y;
+        const other = el === this.#els?.panel ? this.#els?.pill : this.#els?.panel;
+        if (other) {
+            other.style.left = `${x}px`;
+            other.style.top = `${y}px`;
+        }
+    }
+
     #paintGraph(series) {
-        const canvas = this.#els.graph;
+        const canvas = this.#els?.graph;
+        if (!canvas || !series || this.#pill) return;
         const ctx = canvas.getContext('2d');
+        if (!ctx) return;
         const dpr = Math.min(window.devicePixelRatio || 1, 2);
-        const cssW = canvas.clientWidth || 336;
-        const cssH = canvas.clientHeight || 52;
+        const cssW = canvas.clientWidth;
+        const cssH = canvas.clientHeight;
+        if (cssW < 2 || cssH < 2) return;
         const pixelW = Math.round(cssW * dpr);
         const pixelH = Math.round(cssH * dpr);
         if (canvas.width !== pixelW || canvas.height !== pixelH) {
