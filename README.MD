@@ -23,6 +23,8 @@ dark console.
 
 > Il Core non sa cosa sta monitorando. Riceve solo dati grezzi.
 
+Versione attuale: **0.6.6** (`package.json` e `BEE_LADYBUG_VERSION`).
+
 ## Perché questa struttura
 
 Il file storico `BeeLadybug` era accoppiato a un engine di gioco (entità,
@@ -40,30 +42,56 @@ funziona sopra un gioco, sopra una pagina, o da solo in una sandbox.
 ```
 bee-ladybug/
 ├── src/
-│   ├── index.js                 # API pubblica
-│   ├── index.d.ts               # tipi npm / tsc
+│   ├── index.js
+│   ├── index.d.ts
 │   ├── core/
+│   │   ├── AiAssistant.js
 │   │   ├── BeeLadybugCore.js
+│   │   ├── ReportExporter.js
 │   │   └── UIOverlay.js
 │   └── adapters/
-│       ├── CanvasAdapter.js
-│       ├── WebDOMAdapter.js
-│       ├── CSSAdapter.js
 │       ├── AntAdapter.js
+│       ├── CanvasAdapter.js
+│       ├── CSSAdapter.js
 │       ├── SpiderAdapter.js
-│       └── python/PythonBridge.js
+│       ├── WebDOMAdapter.js
+│       └── python/
+│           └── PythonBridge.js
 ├── examples/
 │   ├── core.html
+│   ├── core-sandbox.js
 │   ├── canvas-sandbox.js
 │   ├── dom.html
+│   ├── dom-sandbox.js
 │   ├── css-hunt.html
+│   ├── css-hunt.js
 │   ├── python.html
-│   └── python/sender.py
-├── tsconfig.json
-├── package.json
+│   ├── python-sandbox.js
+│   └── python/
+│       └── sender.py
+├── tests/
+│   ├── adapter-registry.test.js
+│   ├── ant-adapter.test.js
+│   ├── canvas-adapter.test.js
+│   ├── core.test.js
+│   ├── css-adapter.test.js
+│   ├── python-bridge.test.js
+│   ├── report-exporter.test.js
+│   ├── spider-adapter.test.js
+│   └── webdom-adapter.test.js
+├── docs/
+│   ├── overlay-core.jpg
+│   └── overlay-python.jpg
+├── .github/workflows/ci.yml
 ├── CHANGELOG.md
-├── LICENSE
+├── CODE_OF_CONDUCT.md
+├── CONTRIBUTING.md
+├── SECURITY.md
+├── eslint.config.js
 ├── index.html
+├── package.json
+├── LICENSE
+├── tsconfig.json
 └── README.md
 ```
 
@@ -139,19 +167,25 @@ bee.subscribe((packet) => {
 
 | Tasto | Azione |
 | --- | --- |
-| `F2` | mostra / nascondi overlay (e hitbox canvas) |
-| `F3` | slow-motion del tempo fittizio (`0.25x` / `1x`) |
-| `F4` | freeze / run del tempo fittizio |
-| `F8` | scarica il report HTML |
-| `F6` | CSS hunt, se `CSSAdapter` è attaccato |
-| `P` | blocca il pannello CSS sull'elemento corrente, solo con la hunt accesa |
-| `S` | scansione CSS, solo con la hunt accesa |
+| `F2` | Mostra o nasconde l'overlay. Le hitbox del canvas e i riquadri della CSS hunt seguono la visibilità. |
+| `F3` | Con l'overlay visibile, alterna il clock fittizio tra `slowScale` (default `0.25`) e `1`. Se il clock è fermo, lo rimette in moto. Il pulsante **1x LIVE** forza `1`. |
+| `F4` | Con l'overlay visibile, ferma o fa ripartire il clock fittizio. L'overlay continua a disegnarsi. |
+| `F6` | Con l'overlay visibile e `CSSAdapter` attaccato, accende o spegne la CSS hunt. La hunt parte spenta. Non scatta mentre si scrive in un campo. |
+| `F8` | Chiama `exportReport('html')` e scarica il report. Vale anche a overlay nascosto. |
+| `P` | Con la hunt accesa, blocca il pannello sull'elemento corrente. Ctrl, Meta e Alt lasciano il tasto al browser. |
+| `S` | Con la hunt accesa, scansiona la pagina. Stessi limiti di `P`. |
 
 Niente `F12`, niente tilde: sui layout italiani la tilde non è un tasto unico.
 
+## Pannello
+
+Il pannello nasce a 360×auto, con `top` e `left` a 12px. Si tira dall'angolo: minimo 340px, massimo 90vw e 90vh. La lista EVENTS cresce con l'altezza (`flex: 1`, minimo 140px). Accanto a LIVE, **WIDE** porta la larghezza a 680px (entro il 90vw) e il pulsante diventa **COMPACT**, che torna a 360px. Larghezza, altezza e quello stato stanno in `localStorage` (`bee-ladybug.panel`) e tornano all'avvio. Il grafico FPS si ridisegna quando la misura cambia.
+
 ## Export
 
-`F8`, il pulsante **F8 EXPORT** nel piede dell'overlay, o `exportReport()` scaricano `report-AAAAMMGG-HHMM.html`. Il file raccoglie log, serie e una sezione per ogni adapter attaccato. `json` e `csv` usano gli stessi dati.
+`F8`, il pulsante **F8 EXPORT**, o `exportReport()` producono il report. `html` e `csv` sono stringhe, `json` è l'oggetto. Con l'overlay montato il browser scarica `report-YYYYMMDD-HHMM.html` (o `.json` / `.csv`). Senza overlay, o senza `document`, la chiamata restituisce il valore e non scarica nulla.
+
+Il file ha i log del Core, le serie e una sezione per ogni adapter che espone `snapshot()`. Righe con lo stesso selettore, la stessa regola e lo stesso valore diventano una sola, con `×N` nel valore. La severity `warm` è registrata come `warn`. Il riepilogo errors/warnings/ok conta le righe degli adapter e i log del Core. Il CSV ha le colonne `adapter,severity,selector,rule,value,source`. Le coordinate delle hitbox canvas sono arrotondate a un decimale. `#wpadminbar` e i suoi figli, i nodi nascosti, i box 0×0 e il chrome di BeeLadybug restano fuori dalle righe degli adapter.
 
 ```js
 import { exportReport } from './src/index.js';
@@ -159,8 +193,6 @@ import { exportReport } from './src/index.js';
 exportReport(bee, { format: 'html' });
 bee.exportReport('json');
 ```
-
-Con `ui: false`, o senza `document`, la chiamata restituisce la stringa o l'oggetto e non scarica nulla.
 
 ## CanvasAdapter
 
@@ -225,7 +257,9 @@ css.attach();
 - un antenato che crea uno stacking context (`transform`, `opacity` sotto 1, `filter`, oppure `position` non static con `z-index`). I figli si raggruppano sulla causa: `div.hero creates stacking context (transform) - z-index of 3 children is trapped`. `will-change: transform` o `opacity` è una riga grigia, con la nota sullo `z-index` sulla stessa riga
 - `<img>` con rapporto del file diverso di oltre il 5% dal riquadro disegnato (`getBoundingClientRect`), solo se `object-fit` calcolato è `fill` (il default)
 
-`S` con la hunt accesa percorre la pagina. L'overflow resta solo sull'elemento che lo causa: un antenato si salta se un discendente sfora della stessa quantità (±2px), oppure se la larghezza del box ci sta nel viewport e a uscire è un figlio. Righe uguali (stesso selettore e stesso problema) diventano una sola, con il conteggio (`article overflows viewport ×4`). L'ordine è: causa di overflow, click bloccato, testo invisibile, immagine distorta, `!important`. Un click sulla riga disegna il contorno rosso. `P` ferma il pannello sull'elemento corrente. **Issues** raggruppa per causa: `body::after blocks clicks on 10 elements` è una riga rossa, e il click la apre sull'elenco degli elementi. In cima alla sezione, la legenda dice rosso = bug e grigio = info. Un foglio illeggibile è una riga grigia, una per foglio, e non entra tra i bug. L'overlay resta alto al massimo metà schermo, scorre al suo interno, e le sezioni Status, Issues, Inspect ed Events si chiudono. In console un elemento pulito non viene scritto, e con la hunt accesa restano fuori anche `hover` e `mutate attr` del DOM, a meno che `F3` SLOW sia acceso. Ogni problema CSS viene scritto una sola volta per elemento ogni 5 secondi. I fogli di stile restano in cache finché un `MutationObserver` non vede un cambio a `<style>` o `<link>`. Hover è limitato a un frame.
+`S` con la hunt accesa percorre la pagina. L'overflow resta solo sull'elemento che lo causa: un antenato si salta se un discendente sfora della stessa quantità (±2px), oppure se la larghezza del box ci sta nel viewport e a uscire è un figlio. Righe uguali (stesso selettore e stesso problema) diventano una sola, con il conteggio (`article overflows viewport ×4`). L'ordine è: causa di overflow, click bloccato, testo invisibile, immagine distorta, `!important`. Un click sulla riga disegna il contorno rosso. `P` ferma il pannello sull'elemento corrente. **Issues** raggruppa per causa: `body::after blocks clicks on 10 elements` è una riga rossa, e il click la apre sull'elenco degli elementi. In cima alla sezione, la legenda dice rosso = bug e grigio = info. Un foglio illeggibile è una riga grigia, una per foglio, e non entra tra i bug. Le sezioni Status, Issues, Inspect ed Events si chiudono. Misura e pulsante WIDE/COMPACT sono quelli della sezione Pannello. In console un elemento pulito non viene scritto, e con la hunt accesa restano fuori anche `hover` e `mutate attr` del DOM, a meno che `F3` SLOW sia acceso. Ogni problema CSS viene scritto una sola volta per elemento ogni 5 secondi. I fogli di stile restano in cache finché un `MutationObserver` non vede un cambio a `<style>` o `<link>`. Hover è limitato a un frame.
+
+Ctrl, Meta e Alt arrivano al browser, quindi Ctrl+S, Cmd+S e Ctrl+P non partono la scan né il pin. Prima del primo movimento del mouse non c'è ispezione. Scan, hover e pin saltano i nodi nascosti, `#wpadminbar` e il chrome di BeeLadybug (`data-bee-ladybug-css`). Un colore in `oklch()`, `lab()`, `color()` o `color-mix()` non è testo invisibile: lo è solo un colore davvero trasparente. I fogli disabilitati, o il cui `media` non coincide, non entrano tra le `!important`. Lo snapshot tiene fino a 80 righe e il taglio arriva dopo l'ordine per gravità. `css.target`, `css.hits` e `css.pin` tornano ai valori di riposo quando la hunt si spegne, e `css.hits` torna a 0 quando il puntatore lascia ogni nodo.
 
 Demo: `examples/css-hunt.html`.
 
@@ -257,7 +291,9 @@ const ant = new AntAdapter(bee, {
 ant.attach();
 ```
 
-`MutationObserver` indipendente da `WebDOMAdapter` (possono condividere lo stesso `root`). Se un nodo supera la soglia, arriva un `warn` `source: 'ant'`.
+`MutationObserver` indipendente da `WebDOMAdapter`. Il pulsante **ANT** parte acceso. Soglia default 30 mutazioni in `windowMs` 1000. Un `warn` per finestra, `source: 'ant'`, messaggio `High Mutation Rate on <selettore>`, payload `{ message, node }`. I record `characterData` contano sull'elemento padre. `#wpadminbar`, i nodi nascosti, i box 0×0 e il chrome di BeeLadybug non contano. Il selettore è `#id`, altrimenti `.primaClasse`, altrimenti il tag, con l'escape degli id e delle classi. Le righe calde scadono con la finestra; sopra 40 esce quella con meno mutazioni. `snapshot()` elenca le finestre ancora aperte: regola `mutations`, valore `N/1000ms`, severity `warn`.
+
+`setRoot(root)` cambia radice e azzera i contatori. `setRoot(null)` smette di osservare. Senza root, senza `MutationObserver`, o se `observe()` lancia, parte un solo `warn` e il log non dice che l'osservazione è attiva.
 
 ## SpiderAdapter
 
@@ -271,7 +307,7 @@ const spider = new SpiderAdapter(bee, {
 spider.attach();
 ```
 
-`PerformanceObserver`: `longtask` > 50ms → `telemetry`; risorse > soglia → `warn`. Se il browser non espone `longtask` (Firefox/Safari), un log una tantum e quella parte si spegne senza errori.
+Il pulsante **SPIDER** parte acceso. `longtask` oltre `longTaskThreshold` (default 50ms) diventa `telemetry` con `kind: 'longtask'`. Una risorsa oltre `resourceThreshold` (default 500ms) diventa un `warn`: `Risorsa lenta: <nome> (<ms>ms)`. Ogni lista dello snapshot tiene al massimo 40 voci già viste, regole `longtask` e `resource`. Se manca `PerformanceObserver`, o il browser non espone `longtask`, un solo log: `Long task detection non disponibile in questo browser`.
 
 ## PythonBridge
 
@@ -329,7 +365,7 @@ npm login
 npm publish --access public
 ```
 
-Versione runtime e pacchetto: **0.4.1** (`BEE_LADYBUG_VERSION` e `package.json` devono restare uguali).
+Versione runtime e pacchetto: **0.6.6** (`BEE_LADYBUG_VERSION` e `package.json` devono restare uguali).
 
 ## Assistente AI (gancio, nessun vendor)
 
@@ -403,12 +439,13 @@ bee.destroy();
 
 ## Roadmap
 
-1. **Ora** — Core, adapter, registro toggle overlay, Ant/Spider, PythonBridge, tipi, ESLint, gancio AI multi-provider. Fatto.
-2. **npm 0.4.1** — `npm publish`.
+1. **0.6.6** — Core, adapter Canvas, DOM, CSS, Ant e Spider, PythonBridge, registro dei toggle, gancio AI multi-provider, export HTML/JSON/CSV, CSS hunt, pannello ridimensionabile con WIDE/COMPACT. È la versione in `package.json` e in `BEE_LADYBUG_VERSION`.
 
 ## Come contribuire
 
 Il Core resta cieco. Se una feature ha bisogno di conoscere Canvas, DOM o
 Python, vive in un adapter. Patch al Core solo per clock, buffer, protocollo
 o UI condivisa.
+
+Issue, fork e pull request: [CONTRIBUTING.md](CONTRIBUTING.md). Comportamento in community: [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md). Una vulnerabilità si segnala in privato, come descritto in [SECURITY.md](SECURITY.md).
 
