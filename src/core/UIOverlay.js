@@ -13,6 +13,10 @@ function formatSimTime(ms) {
 }
 
 const HOST_TAG = 'bee-ladybug-overlay';
+const PANEL_STORE_KEY = 'bee-ladybug.panel';
+const PANEL_COMPACT = 360;
+const PANEL_WIDE = 680;
+const PANEL_MIN_W = 340;
 
 const STYLES = `
 :host {
@@ -35,7 +39,10 @@ const STYLES = `
   top: 12px;
   left: 12px;
   width: 360px;
-  max-height: 50vh;
+  min-width: 340px;
+  max-width: 90vw;
+  max-height: 90vh;
+  resize: both;
   display: flex;
   flex-direction: column;
   background: rgba(7, 8, 12, 0.94);
@@ -118,6 +125,30 @@ const STYLES = `
 }
 .bl-mode[data-mode="FREEZE"] { color: #ff3b4e; }
 .bl-mode[data-mode^="SLOW"] { color: #ffd36a; }
+.bl-size {
+  appearance: none;
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 3px 6px;
+  border: 1px solid rgba(110, 231, 255, 0.55);
+  background: transparent;
+  color: #6ee7ff;
+  font: 700 9px ui-monospace, Consolas, monospace;
+  letter-spacing: 0.08em;
+  line-height: 1.2;
+  cursor: pointer;
+}
+.bl-size:hover,
+.bl-size:focus-visible {
+  color: #05060a;
+  background: #6ee7ff;
+  border-color: #6ee7ff;
+  outline: none;
+}
+.bl-size[aria-pressed="true"] {
+  color: #ffd36a;
+  border-color: rgba(255, 211, 106, 0.75);
+}
 .bl-info {
   appearance: none;
   position: relative;
@@ -205,7 +236,8 @@ const STYLES = `
 .bl-k { color: #8b91a3; }
 .bl-v { color: #e9edf5; }
 .bl-console {
-  max-height: 140px;
+  flex: 1;
+  min-height: 140px;
   overflow: auto;
   padding: 6px 10px 8px;
   background: #05060a;
@@ -226,7 +258,7 @@ const STYLES = `
   flex: 0 0 auto;
   flex-wrap: wrap;
   gap: 6px;
-  padding: 8px 10px;
+  padding: 8px 18px 8px 10px;
   border-top: 1px solid rgba(255, 59, 78, 0.22);
 }
 .bl-btn {
@@ -272,6 +304,24 @@ const STYLES = `
   overflow: auto;
   min-height: 0;
   flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+}
+.bl-section[data-section="events"] {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.bl-section[data-section="events"][data-open="false"] {
+  flex: 0 0 auto;
+}
+.bl-section[data-section="events"][data-open="true"] > .bl-section-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
 }
 .bl-section[hidden] { display: none; }
 .bl-section-toggle {
@@ -443,6 +493,10 @@ export class UIOverlay {
         this.#openCauses = new Set();
         this.#flashAt = new Map();
         this.#flashTimers = new Map();
+        this.#wide = false;
+        this.#layoutHeight = null;
+        this.#panelObserver = null;
+        this.#saveTimer = 0;
     }
 
     #host;
@@ -460,6 +514,10 @@ export class UIOverlay {
     #openCauses;
     #flashAt;
     #flashTimers;
+    #wide;
+    #layoutHeight;
+    #panelObserver;
+    #saveTimer;
 
     /** @param {'auto' | HTMLElement} [target] */
     mount(target = 'auto') {
@@ -488,6 +546,7 @@ export class UIOverlay {
                   <span class="bl-badge">CORE</span>
                   <span class="bl-mode-wrap">
                     <span class="bl-mode" data-el="mode">LIVE</span>
+                    <button class="bl-size" data-el="wide" type="button" aria-pressed="false" aria-label="Wide panel">WIDE</button>
                     <button class="bl-info" type="button" aria-describedby="bl-freeze-tip" aria-label="Freeze stops the simulated clock, not this overlay">
                       <span aria-hidden="true">ⓘ</span>
                       <span class="bl-info-tip" id="bl-freeze-tip">Freeze does not stop this overlay. It only stops the simulated clock. Adapters must listen for the sys event (op: freeze).</span>
@@ -572,8 +631,12 @@ export class UIOverlay {
             notes: this.#root.querySelector('[data-el="notes"]'),
             providers: this.#root.querySelector('[data-el="providers"]'),
             adapters: this.#root.querySelector('[data-el="adapters"]'),
-            hotkeys: this.#root.querySelector('[data-el="hotkeys"]')
+            hotkeys: this.#root.querySelector('[data-el="hotkeys"]'),
+            panel: this.#root.querySelector('.bl-panel'),
+            wide: this.#root.querySelector('[data-el="wide"]')
         };
+
+        this.#els.wide?.addEventListener('click', () => this.#toggleWide());
 
         this.#root.querySelector('.bl-foot').addEventListener('click', (event) => {
             const btn = event.target.closest('[data-act]');
@@ -636,8 +699,10 @@ export class UIOverlay {
             this.#stickBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 24;
         });
 
+        this.#restoreLayout();
         node.appendChild(this.#host);
         this.#mounted = true;
+        this.#watchPanel();
         this.setVisible(this.core.visible);
         this.#replayLogs();
         this.render();
@@ -645,6 +710,7 @@ export class UIOverlay {
     }
 
     unmount() {
+        this.#stopPanelWatch();
         if (this.#host?.parentNode) this.#host.parentNode.removeChild(this.#host);
         this.#host = null;
         this.#root = null;
@@ -659,6 +725,8 @@ export class UIOverlay {
         this.#openCauses.clear();
         this.#clearFlashTimers();
         this.#flashAt.clear();
+        this.#wide = false;
+        this.#layoutHeight = null;
         return this;
     }
 
@@ -935,6 +1003,118 @@ export class UIOverlay {
         this.#flashTimers.clear();
     }
 
+    #toggleWide() {
+        const panel = this.#els?.panel;
+        if (!panel) return;
+        this.#wide = !this.#wide;
+        const width = Math.min(this.#wide ? PANEL_WIDE : PANEL_COMPACT, this.#widthCap());
+        panel.style.width = `${Math.round(width)}px`;
+        this.#syncWideButton();
+        this.#rememberLayout();
+        if (this.core) this.#paintGraph(this.core.getPrimaryHistory());
+    }
+
+    #syncWideButton() {
+        const btn = this.#els?.wide;
+        if (!btn) return;
+        btn.textContent = this.#wide ? 'COMPACT' : 'WIDE';
+        btn.setAttribute('aria-pressed', this.#wide ? 'true' : 'false');
+        btn.setAttribute('aria-label', this.#wide ? 'Compact panel' : 'Wide panel');
+    }
+
+    #restoreLayout() {
+        const panel = this.#els?.panel;
+        if (!panel) return;
+        const saved = readPanelStore();
+        if (!saved) {
+            this.#syncWideButton();
+            return;
+        }
+        this.#wide = saved.wide === true;
+        let width = Number(saved.width);
+        if (!Number.isFinite(width)) width = this.#wide ? PANEL_WIDE : PANEL_COMPACT;
+        width = Math.min(Math.max(width, PANEL_MIN_W), this.#widthCap());
+        panel.style.width = `${Math.round(width)}px`;
+        const height = Number(saved.height);
+        if (Number.isFinite(height) && height >= 120) {
+            const next = Math.min(height, this.#heightCap());
+            panel.style.height = `${Math.round(next)}px`;
+            this.#layoutHeight = Math.round(next);
+        }
+        this.#syncWideButton();
+    }
+
+    #watchPanel() {
+        const panel = this.#els?.panel;
+        if (!panel || typeof ResizeObserver !== 'function') return;
+        this.#panelObserver = new ResizeObserver(() => this.#onPanelSize());
+        this.#panelObserver.observe(panel);
+    }
+
+    #stopPanelWatch() {
+        if (this.#panelObserver) {
+            this.#panelObserver.disconnect();
+            this.#panelObserver = null;
+        }
+        if (this.#saveTimer && typeof clearTimeout === 'function') clearTimeout(this.#saveTimer);
+        this.#saveTimer = 0;
+    }
+
+    #onPanelSize() {
+        const panel = this.#els?.panel;
+        const canvas = this.#els?.graph;
+        if (!panel || !canvas || !this.core) return;
+        if (canvas.clientWidth < 2 || canvas.clientHeight < 2) return;
+        if (panel.style.height) {
+            const height = Math.round(panel.getBoundingClientRect().height);
+            if (height >= 120) this.#layoutHeight = height;
+        }
+        this.#paintGraph(this.core.getPrimaryHistory());
+        this.#queueLayoutSave();
+    }
+
+    #queueLayoutSave() {
+        if (typeof setTimeout !== 'function') {
+            this.#rememberLayout();
+            return;
+        }
+        if (this.#saveTimer) clearTimeout(this.#saveTimer);
+        this.#saveTimer = setTimeout(() => {
+            this.#saveTimer = 0;
+            this.#rememberLayout();
+        }, 150);
+    }
+
+    #rememberLayout() {
+        const panel = this.#els?.panel;
+        if (!panel || !panel.isConnected) return;
+        const rect = panel.getBoundingClientRect();
+        if (rect.width < 80) return;
+        const data = {
+            width: Math.round(rect.width),
+            height: this.#layoutHeight,
+            wide: this.#wide === true
+        };
+        try {
+            if (typeof localStorage === 'undefined') return;
+            localStorage.setItem(PANEL_STORE_KEY, JSON.stringify(data));
+        } catch {
+            /* private mode, sandboxed frame, or a full quota */
+        }
+    }
+
+    #widthCap() {
+        if (typeof window === 'undefined') return PANEL_WIDE;
+        const view = Number(window.innerWidth) || PANEL_COMPACT;
+        return Math.max(PANEL_MIN_W, Math.floor(view * 0.9));
+    }
+
+    #heightCap() {
+        if (typeof window === 'undefined') return 900;
+        const view = Number(window.innerHeight) || 400;
+        return Math.max(160, Math.floor(view * 0.9));
+    }
+
     #paintGraph(series) {
         const canvas = this.#els.graph;
         const ctx = canvas.getContext('2d');
@@ -983,6 +1163,19 @@ export class UIOverlay {
         ctx.stroke();
 
         this.#els.graphStats.textContent = `min ${min.toFixed(1)}  max ${max.toFixed(1)}  avg ${series.avg.toFixed(1)}`;
+    }
+}
+
+function readPanelStore() {
+    try {
+        if (typeof localStorage === 'undefined') return null;
+        const raw = localStorage.getItem(PANEL_STORE_KEY);
+        if (!raw) return null;
+        const data = JSON.parse(raw);
+        if (!data || typeof data !== 'object') return null;
+        return data;
+    } catch {
+        return null;
     }
 }
 
