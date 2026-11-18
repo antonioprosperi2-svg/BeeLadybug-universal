@@ -441,6 +441,25 @@ bee.destroy();
 
 1. **0.6.7** — Core, adapter Canvas, DOM, CSS, Ant e Spider, PythonBridge, registro dei toggle, gancio AI multi-provider, export HTML/JSON/CSV, CSS hunt, pannello ridimensionabile con WIDE/COMPACT, trascinabile dall'header e riducibile a una pillola con la coccinella e gli FPS. È la versione in `package.json` e in `BEE_LADYBUG_VERSION`.
 
+## Chrome extension
+
+L'estensione sta in `extension/` e non entra nel pacchetto npm. Non raccoglie dati e non fa richieste di rete. Il permesso è solo sulla scheda attiva, e solo quando premi il pulsante.
+
+```bash
+npm install
+npm run build:extension
+```
+
+Poi in Chrome:
+
+1. Apri `chrome://extensions`.
+2. Attiva **Modalità sviluppatore**.
+3. **Carica estensione non pacchettizzata** e scegli la cartella `extension/`.
+
+Il pulsante **Attiva/Disattiva HUD** inietta l'HUD nella scheda attiva. Un secondo clic lo spegne senza ricaricare la pagina, un terzo lo riaccende. Su `chrome://` e sul Chrome Web Store il popup spiega che la pagina non si può ispezionare.
+
+Le icone in `extension/icons/` sono segnaposto. Rigenerale con `node scripts/generate-extension-icons.js`, oppure sostituisci `icon16.png`, `icon48.png` e `icon128.png`.
+
 ## Come contribuire
 
 Il Core resta cieco. Se una feature ha bisogno di conoscere Canvas, DOM o

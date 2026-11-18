@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <title>BeeLadybug</title>
+  <style>
+    body {
+      margin: 0;
+      width: 240px;
+      background: #07080c;
+      color: #e9edf5;
+      font: 12px/1.4 ui-monospace, Consolas, monospace;
+    }
+    main { padding: 12px; }
+    button {
+      width: 100%;
+      margin: 0;
+      padding: 8px 10px;
+      border: 1px solid #ffd36a;
+      background: #16181f;
+      color: #fff6d8;
+      font: 700 11px ui-monospace, Consolas, monospace;
+      letter-spacing: 0.04em;
+      cursor: pointer;
+    }
+    button:focus-visible {
+      outline: 1px solid #6ee7ff;
+      outline-offset: 2px;
+    }
+    #status {
+      min-height: 3.2em;
+      margin: 10px 0 0;
+      color: #ffd36a;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <button id="toggle" type="button">Attiva/Disattiva HUD</button>
+    <p id="status" role="status"></p>
+  </main>
+  <script src="popup.js"></script>
+</body>
+</html>

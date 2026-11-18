@@ -16,11 +16,12 @@
   "files": [
     "src"
   ],
-    "scripts": {
-        "typecheck": "tsc --noEmit",
-        "lint": "eslint src examples",
-        "test": "node --test tests/*.test.js"
-    },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src examples",
+    "test": "node --test tests/*.test.js",
+    "build:extension": "esbuild extension/content.src.js --bundle --format=iife --platform=browser --target=es2022 --outfile=extension/content.js"
+  },
   "keywords": [
     "debug",
     "telemetry",
@@ -47,10 +48,11 @@
   "engines": {
     "node": ">=20"
   },
-    "devDependencies": {
-        "@eslint/js": "^9.36.0",
-        "eslint": "^10.8.1",
-        "globals": "^16.0.0",
-        "typescript": "^5.7.0"
-    }
+  "devDependencies": {
+    "@eslint/js": "^9.36.0",
+    "esbuild": "^0.28.2",
+    "eslint": "^10.8.1",
+    "globals": "^16.0.0",
+    "typescript": "^5.7.0"
+  }
 }
