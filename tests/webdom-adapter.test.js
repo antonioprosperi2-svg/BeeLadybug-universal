@@ -454,6 +454,29 @@ test('quando hover passa a null anche lo state display torna a —', () => {
     bee.destroy();
 });
 
+test('l\'overlay DOM resta trasparente anche se la pagina colora tutti i canvas', () => {
+    installStyles();
+    const fake = installFakeDom();
+    const bee = makeCore();
+    try {
+        const adapter = new WebDOMAdapter(bee, { root: makeNode({ id: 'stage' }), autoTick: false });
+        adapter.attach();
+        const canvas = fake.created[0];
+        assert.equal(canvas.style.background, 'transparent');
+        assert.equal(canvas.style.border, '0');
+        assert.equal(canvas.style.padding, '0');
+        assert.equal(canvas.style.boxShadow, 'none');
+        assert.equal(canvas.style.outline, 'none');
+        assert.equal(canvas.style.filter, 'none');
+        assert.equal(canvas.style.opacity, '1');
+        assert.equal(canvas.style.transform, 'none');
+        adapter.detach();
+    } finally {
+        fake.restore();
+        bee.destroy();
+    }
+});
+
 test('syncOverlay assegna bitmap e stile solo quando cambiano', () => {
     installStyles();
     const fake = installFakeDom();

@@ -2,6 +2,10 @@
 <p align="center">
   <img src="https://beeenginejs.com/wp-content/uploads/2026/10/beeladybug-logo-animato-ezgif.com-effects.gif" alt="BeeEngine Logo" width="900" />
 </p>
+## 0.6.8
+
+- Fixed: overlay canvas covered the game when the page styles all canvas elements. The same inline reset applies to the CanvasAdapter and WebDOMAdapter overlays. CSSAdapter draws with divs, so it has no canvas overlay to reset.
+
 ## 0.6.7
 
 - The HUD panel can be dragged from its header and stays inside the screen. A header control collapses it to a pill with the ladybug mark and the FPS; clicking the pill opens the panel again. Position and that state are restored from localStorage with the other panel settings.

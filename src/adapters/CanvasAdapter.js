@@ -425,6 +425,14 @@ export class CanvasAdapter {
         if (typeof document === 'undefined' || this.#overlay || !this.canvas) return;
         const canvas = document.createElement('canvas');
         canvas.setAttribute('data-bee-ladybug-canvas', '');
+        canvas.style.background = 'transparent';
+        canvas.style.border = '0';
+        canvas.style.padding = '0';
+        canvas.style.boxShadow = 'none';
+        canvas.style.outline = 'none';
+        canvas.style.filter = 'none';
+        canvas.style.opacity = '1';
+        canvas.style.transform = 'none';
         canvas.style.pointerEvents = 'none';
         canvas.style.position = 'fixed';
         canvas.style.zIndex = '2147483645';

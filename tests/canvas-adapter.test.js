@@ -359,6 +359,32 @@ test('senza canvas e con overlay attivo: un solo warn, nessun errore, telemetria
     }
 });
 
+test('l\'overlay resta trasparente anche se la pagina colora tutti i canvas', () => {
+    const bee = makeCore();
+    const fake = installFakeDocument();
+    try {
+        const adapter = new CanvasAdapter(bee, {
+            overlay: true,
+            canvas: fakeHost(),
+            entities: [{ name: 'player', x: 4, y: 8, width: 16, height: 12 }]
+        });
+        adapter.attach();
+        const overlay = fake.created[0];
+        assert.equal(overlay.style.background, 'transparent');
+        assert.equal(overlay.style.border, '0');
+        assert.equal(overlay.style.padding, '0');
+        assert.equal(overlay.style.boxShadow, 'none');
+        assert.equal(overlay.style.outline, 'none');
+        assert.equal(overlay.style.filter, 'none');
+        assert.equal(overlay.style.opacity, '1');
+        assert.equal(overlay.style.transform, 'none');
+        adapter.detach();
+    } finally {
+        fake.restore();
+        bee.destroy();
+    }
+});
+
 test('overlay: si monta con il canvas, setCanvas(null) lo smonta, setCanvas lo rimonta', () => {
     const bee = makeCore();
     const fake = installFakeDocument();
