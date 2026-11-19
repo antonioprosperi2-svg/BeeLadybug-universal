@@ -1,7 +1,7 @@
 import { BeeLadybugCore, CanvasAdapter, CSSAdapter, WebDOMAdapter } from '../src/index.js';
 
 /**
- * Lives on the content-script global, outside this bundle.
+ * Lives on the page global (MAIN world), outside this bundle.
  * Each injection runs a fresh copy; the global is what remembers on/off.
  */
 const STATE_KEY = '__BEE_LADYBUG_EXTENSION__';
@@ -26,9 +26,10 @@ function stop(state) {
 
 function start() {
     const canvas = document.querySelector('canvas');
-    const core = new BeeLadybugCore();
     const adapters = [];
+    let core;
     try {
+        core = new BeeLadybugCore();
         const dom = new WebDOMAdapter(core, {
             root: document.body || document.documentElement
         });
@@ -46,7 +47,8 @@ function start() {
         }
 
         globalThis[STATE_KEY] = { core, adapters };
-    } catch {
+    } catch (error) {
+        console.error('[BeeLadybug extension]', error);
         stop({ core, adapters });
     }
 }

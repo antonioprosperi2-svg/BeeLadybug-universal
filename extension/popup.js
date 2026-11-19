@@ -18,15 +18,21 @@ toggle.addEventListener('click', async () => {
     status.textContent = '';
     try {
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-        if (!tab || !tab.id || blockedUrl(tab.url)) {
+        if (!tab || !tab.id) {
+            status.textContent = 'Nessuna scheda attiva.';
+            return;
+        }
+        if (blockedUrl(tab.url)) {
             status.textContent = BLOCKED;
             return;
         }
         await chrome.scripting.executeScript({
             target: { tabId: tab.id },
-            files: ['content.js']
+            files: ['content.js'],
+            world: 'MAIN'
         });
-    } catch {
-        status.textContent = BLOCKED;
+    } catch (error) {
+        console.error(error);
+        status.textContent = error && error.message ? error.message : String(error);
     }
 });
