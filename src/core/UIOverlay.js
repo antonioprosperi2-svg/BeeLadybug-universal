@@ -45,7 +45,7 @@ const STYLES = `
   resize: both;
   display: flex;
   flex-direction: column;
-  background: rgba(13, 17, 23, 0.96);
+npm  background: rgba(13, 17, 23, 0.96);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
   border: 1px solid rgba(255, 59, 78, 0.55);

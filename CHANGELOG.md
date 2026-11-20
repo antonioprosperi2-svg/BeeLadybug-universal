@@ -2,6 +2,10 @@
 <p align="center">
   <img src="https://beeenginejs.com/wp-content/uploads/2026/10/beeladybug-logo-animato-ezgif.com-effects.gif" alt="BeeEngine Logo" width="900" />
 </p>
+## 0.6.11
+
+- The extension popup closes after it injects the HUD, so Space returns to the page instead of pressing the toolbar button again. A Space keydown in the content script still only blurs a focused HUD button and does not hide the panel.
+
 ## 0.6.10
 
 - The HUD panel uses an opaque dark background (`#0d1117` at 96%) with a 6px backdrop blur, so the text stays readable on white pages. Footer buttons and the header bar are raised, with a 12px minimum and alternating rows in INSPECT and EVENTS.

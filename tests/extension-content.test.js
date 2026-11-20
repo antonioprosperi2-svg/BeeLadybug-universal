@@ -11,6 +11,7 @@ import {
     isHudGameKey,
     pagePlan
 } from '../extension/content.src.js';
+import { onToggleClick } from '../extension/popup.js';
 
 test('con un canvas parte solo CanvasAdapter, senza canvas partono DOM e CSS', () => {
     assert.deepEqual(pagePlan(true), {
@@ -79,6 +80,8 @@ test('Spazio e frecce su un bottone dell\'HUD non lo riattivano', () => {
     const span = { closest(sel) { return sel === 'button' ? button : null; } };
     const outside = { closest() { return null; } };
     const root = {
+        hidden: false,
+        hide() { root.hidden = true; },
         contains(node) { return node === button; },
         addEventListener(type, fn) { events.push({ type, fn }); },
         removeEventListener() {}
@@ -99,11 +102,14 @@ test('Spazio e frecce su un bottone dell\'HUD non lo riattivano', () => {
     const space = {
         code: 'Space',
         target: button,
-        preventDefault() { space.prevented = true; }
+        preventDefault() { space.prevented = true; },
+        stopPropagation() { space.stopped = true; }
     };
     fire('keydown', space);
     assert.equal(space.prevented, true);
+    assert.equal(space.stopped, undefined);
     assert.equal(button.blurred, 2);
+    assert.equal(root.hidden, false);
     assert.equal(isHudGameKey(space, root), true);
 
     const arrow = {
@@ -183,4 +189,46 @@ test('il bridge MAIN copia __BEE_ENTITIES__ ogni 100ms e non porta funzioni', ()
     sandbox.__BEE_LADYBUG_ENTITY_BRIDGE__.stop();
     assert.equal(sandbox.cleared, 1);
     assert.equal(sandbox.__BEE_LADYBUG_ENTITY_BRIDGE__, undefined);
+});
+
+test('il popup si chiude dopo aver inviato l\'HUD alla scheda', async () => {
+    const files = [];
+    let closed = false;
+    const message = await onToggleClick({
+        tabs: {
+            query: async () => [{ id: 4, url: 'https://example.com/' }]
+        },
+        scripting: {
+            executeScript: async (options) => {
+                files.push(options.files[0]);
+            }
+        }
+    }, () => { closed = true; });
+    assert.equal(message, '');
+    assert.deepEqual(files, ['entity-bridge.js', 'content.js']);
+    assert.equal(closed, true);
+});
+
+test('una pagina protetta o un\'iniezione fallita lascia il popup aperto', async () => {
+    let closed = false;
+    const blocked = await onToggleClick({
+        tabs: {
+            query: async () => [{ id: 4, url: 'chrome://extensions/' }]
+        },
+        scripting: {
+            executeScript: async () => { throw new Error('non deve iniettare'); }
+        }
+    }, () => { closed = true; });
+    assert.equal(closed, false);
+    assert.match(blocked, /non si può ispezionare/);
+
+    await assert.rejects(() => onToggleClick({
+        tabs: {
+            query: async () => [{ id: 4, url: 'https://example.com/' }]
+        },
+        scripting: {
+            executeScript: async () => { throw new Error('boom'); }
+        }
+    }, () => { closed = true; }));
+    assert.equal(closed, false);
 });
