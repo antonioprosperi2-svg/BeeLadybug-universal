@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "BeeLadybug",
-  "version": "1.0.0",
-  "description": "Toggle the BeeLadybug HUD on the active tab.",
+  "version": "1.0.2",
+  "description": "Inspect DOM layout and CSS issues on any page: overflow, blocked clicks, !important conflicts. Export a full HTML report.",
   "permissions": ["activeTab", "scripting"],
   "action": {
     "default_title": "BeeLadybug",

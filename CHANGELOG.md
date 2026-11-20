@@ -2,9 +2,14 @@
 <p align="center">
   <img src="https://beeenginejs.com/wp-content/uploads/2026/10/beeladybug-logo-animato-ezgif.com-effects.gif" alt="BeeEngine Logo" width="900" />
 </p>
+## 0.6.10
+
+- The HUD panel uses an opaque dark background (`#0d1117` at 96%) with a 6px backdrop blur, so the text stays readable on white pages. Footer buttons and the header bar are raised, with a 12px minimum and alternating rows in INSPECT and EVENTS.
+
 ## 0.6.9
 
 - Chrome extension: a page with a canvas starts only CanvasAdapter (`autoPump`). DOM and CSS stay off until their HUD buttons. A page without a canvas starts DOM and CSS. Entities arrive from `window.__BEE_ENTITIES__` through a MAIN-world script that posts them every 100ms. Space and arrows no longer reactivate a focused HUD button.
+- The HUD collapses repeated issues that share a selector and a message into one row with a count (`img.game-card__cover overflows viewport ×40`). `!important` physical longhands from the same rule and stylesheet render as one shorthand (`margin: 0px`); a missing side stays a longhand, and the F8 report keeps that shorthand plus any longhand from another sheet.
 
 ## 0.6.8
 

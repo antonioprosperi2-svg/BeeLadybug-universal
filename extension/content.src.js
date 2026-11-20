@@ -72,6 +72,26 @@ export function isHudGameKey(event, root) {
  * (PILL hides the panel, DOM toggles the page overlay). Take focus away.
  * @param {{ addEventListener?: Function, removeEventListener?: Function, contains?: Function } | null} root
  */
+/**
+ * The library still has ASK AI. This build has no registered assistant,
+ * so the store build hides the button until a later version.
+ * @param {{ querySelector?: Function, appendChild?: Function } | null} root
+ */
+export function hideAskButton(root) {
+    if (!root || typeof root.querySelector !== 'function') return;
+    if (typeof document !== 'undefined' && typeof root.appendChild === 'function' && !root.querySelector('style[data-bee-hide-ask]')) {
+        const style = document.createElement('style');
+        style.setAttribute('data-bee-hide-ask', '');
+        style.textContent = 'button[data-act="ask"]{display:none !important}';
+        root.appendChild(style);
+    }
+    const button = root.querySelector('[data-act="ask"]');
+    if (!button) return;
+    button.hidden = true;
+    if (button.style) button.style.display = 'none';
+    if (typeof button.setAttribute === 'function') button.setAttribute('aria-hidden', 'true');
+}
+
 export function guardHudButtons(root) {
     if (!root || typeof root.addEventListener !== 'function') return function noop() {};
 
@@ -186,7 +206,9 @@ function start() {
     try {
         core = new BeeLadybugCore();
         const host = document.querySelector(HOST_TAG);
-        unguard = guardHudButtons(host && host.shadowRoot);
+        const shadow = host && host.shadowRoot;
+        hideAskButton(shadow);
+        unguard = guardHudButtons(shadow);
 
         if (plan.canvas) {
             const game = new CanvasAdapter(core, { canvas, autoPump: true });

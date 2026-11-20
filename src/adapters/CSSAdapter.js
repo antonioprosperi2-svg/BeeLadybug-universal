@@ -518,10 +518,11 @@ export class CSSAdapter {
         }));
         for (let i = 0; i < this.#issues.length; i++) {
             const entry = this.#issues[i];
+            const shown = uniqueTargetTexts(entry.targets);
             const item = {
                 key: entry.key,
                 text: formatCause(entry),
-                targets: entry.targets.map((target) => ({
+                targets: shown.map((target) => ({
                     text: target.text,
                     onSelect: () => this.#pin(target.el)
                 }))
@@ -601,7 +602,7 @@ function walkRules(list, source, into) {
             continue;
         }
         if (rule.type === 1 && rule.selectorText && rule.style) {
-            const props = importantProps(rule.style);
+            const props = collapseImportantProps(importantProps(rule.style));
             if (props.length) into.push({ selector: rule.selectorText, source, props });
         } else if (rule.cssRules) {
             walkRules(rule.cssRules, source, into);
@@ -617,6 +618,52 @@ function importantProps(style) {
         props.push({ property, value: style.getPropertyValue(property).trim() });
     }
     return props;
+}
+
+const LONGHAND_FAMILIES = Object.freeze([
+    { shorthand: 'margin', sides: ['margin-top', 'margin-right', 'margin-bottom', 'margin-left'] },
+    { shorthand: 'padding', sides: ['padding-top', 'padding-right', 'padding-bottom', 'padding-left'] },
+    { shorthand: 'border', sides: ['border-top', 'border-right', 'border-bottom', 'border-left'], equalOnly: true },
+    { shorthand: 'inset', sides: ['top', 'right', 'bottom', 'left'] }
+]);
+
+/**
+ * Four physical longhands from one declaration become one shorthand.
+ * A missing side stays a longhand, so the shorthand never invents a value.
+ * `border` collapses only when the four sides are equal: different sides have no single shorthand.
+ * @param {Array<{ property: string, value: string }>} props
+ */
+export function collapseImportantProps(props) {
+    const list = Array.isArray(props) ? props : [];
+    const byName = new Map();
+    for (let i = 0; i < list.length; i++) byName.set(list[i].property, list[i].value);
+    const used = new Set();
+    const collapsed = [];
+    for (let i = 0; i < LONGHAND_FAMILIES.length; i++) {
+        const family = LONGHAND_FAMILIES[i];
+        if (!family.sides.every((side) => byName.has(side))) continue;
+        const values = family.sides.map((side) => byName.get(side));
+        if (family.equalOnly && values.some((value) => value !== values[0])) continue;
+        for (let s = 0; s < family.sides.length; s++) used.add(family.sides[s]);
+        collapsed.push({ property: family.shorthand, value: boxShorthand(values) });
+    }
+    const out = collapsed.slice();
+    for (let i = 0; i < list.length; i++) {
+        if (used.has(list[i].property)) continue;
+        out.push(list[i]);
+    }
+    return out;
+}
+
+function boxShorthand(values) {
+    const top = values[0];
+    const right = values[1];
+    const bottom = values[2];
+    const left = values[3];
+    if (top === right && right === bottom && bottom === left) return top;
+    if (top === bottom && right === left) return `${top} ${right}`;
+    if (right === left) return `${top} ${right} ${bottom}`;
+    return `${top} ${right} ${bottom} ${left}`;
 }
 
 function sheetLabel(sheet) {
@@ -945,7 +992,7 @@ export function formatCause(entry) {
         return `${entry.cause} will-change: ${entry.reason} — z-index of ${count} ${noun} stays in this layer`;
     }
     if (count <= 1) return `${entry.cause} overflows viewport`;
-    return `${entry.cause} overflows viewport · ${count} elements`;
+    return `${entry.cause} overflows viewport ×${count}`;
 }
 
 /**
@@ -1030,6 +1077,19 @@ function stackHint(ancestor, hint) {
 function sameTarget(a, b) {
     if (a.el && b.el) return a.el === b.el;
     return a.text === b.text;
+}
+
+function uniqueTargetTexts(targets) {
+    const list = Array.isArray(targets) ? targets : [];
+    const seen = new Set();
+    const out = [];
+    for (let i = 0; i < list.length; i++) {
+        const text = list[i].text;
+        if (seen.has(text)) continue;
+        seen.add(text);
+        out.push(list[i]);
+    }
+    return out;
 }
 
 function elementCausesOverflow(el) {

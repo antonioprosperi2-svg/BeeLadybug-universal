@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { BeeLadybugCore, CSSAdapter, WebDOMAdapter, exportReport } from '../src/index.js';
-import { addCause, describeCause, formatCause, formatIssue, groupIssues, isDistortedImage, keepOverflowCauses, pushStickyIssue, rememberIssue, stackingReasons } from '../src/adapters/CSSAdapter.js';
+import { addCause, collapseImportantProps, describeCause, formatCause, formatIssue, groupIssues, isDistortedImage, keepOverflowCauses, pushStickyIssue, rememberIssue, stackingReasons } from '../src/adapters/CSSAdapter.js';
 import { domNoiseQuiet } from '../src/adapters/WebDOMAdapter.js';
 
 function makeCore() {
@@ -71,6 +71,67 @@ test('groupIssues conta i duplicati e ordina per gravità', () => {
         'span invisible text (transparent color)',
         'img distorted image',
         'h1 !important h1 { color: red }'
+    ]);
+});
+
+test('lo stesso selettore e lo stesso overflow diventano una riga con il conteggio', () => {
+    const targets = [];
+    for (let i = 0; i < 40; i++) targets.push({ text: 'img.game-card__cover', el: { id: i } });
+    assert.equal(
+        formatCause({ type: 'overflow', cause: 'img.game-card__cover', targets }),
+        'img.game-card__cover overflows viewport ×40'
+    );
+    assert.equal(
+        formatCause({ type: 'overflow', cause: 'img.game-card__cover', targets: targets.slice(0, 1) }),
+        'img.game-card__cover overflows viewport'
+    );
+});
+
+test('i lati !important della stessa regola diventano lo shorthand', () => {
+    assert.deepEqual(collapseImportantProps([
+        { property: 'margin-top', value: '0px' },
+        { property: 'margin-right', value: '0px' },
+        { property: 'margin-bottom', value: '0px' },
+        { property: 'margin-left', value: '0px' },
+        { property: 'color', value: 'red' }
+    ]), [
+        { property: 'margin', value: '0px' },
+        { property: 'color', value: 'red' }
+    ]);
+    assert.deepEqual(collapseImportantProps([
+        { property: 'padding-top', value: '1px' },
+        { property: 'padding-right', value: '2px' },
+        { property: 'padding-bottom', value: '3px' },
+        { property: 'padding-left', value: '4px' }
+    ]), [
+        { property: 'padding', value: '1px 2px 3px 4px' }
+    ]);
+    assert.deepEqual(collapseImportantProps([
+        { property: 'top', value: '0' },
+        { property: 'right', value: '0' },
+        { property: 'bottom', value: '0' },
+        { property: 'left', value: '0' }
+    ]), [
+        { property: 'inset', value: '0' }
+    ]);
+    assert.deepEqual(collapseImportantProps([
+        { property: 'border-top', value: '1px solid red' },
+        { property: 'border-right', value: '1px solid red' },
+        { property: 'border-bottom', value: '1px solid red' },
+        { property: 'border-left', value: '1px solid red' }
+    ]), [
+        { property: 'border', value: '1px solid red' }
+    ]);
+    assert.deepEqual(collapseImportantProps([
+        { property: 'border-top', value: '1px solid red' },
+        { property: 'border-right', value: '0' },
+        { property: 'border-bottom', value: '1px solid red' },
+        { property: 'border-left', value: '0' }
+    ]).map((prop) => prop.property), ['border-top', 'border-right', 'border-bottom', 'border-left']);
+    assert.deepEqual(collapseImportantProps([
+        { property: 'margin-top', value: '0px' }
+    ]), [
+        { property: 'margin-top', value: '0px' }
     ]);
 });
 
@@ -334,6 +395,66 @@ test('snapshot gira con la hunt spenta e salta nascosti e admin', () => {
     }
 });
 
+test('un font dentro un link non è il blocco dei click del genitore', () => {
+    const previousDocument = globalThis.document;
+    const previousStyle = globalThis.getComputedStyle;
+    const previousWindow = globalThis.window;
+    const bee = makeCore();
+    const css = new CSSAdapter(bee);
+    css.attach();
+
+    const link = box('A', '', { left: 700, top: 10, width: 107, height: 20, right: 807, bottom: 30 });
+    link.id = '';
+    const font = box('FONT', '', { left: 700, top: 10, width: 107, height: 20, right: 807, bottom: 30 });
+    font.id = '';
+    font.parentElement = link;
+    link.contains = (node) => node === link || node === font;
+    font.contains = (node) => node === font;
+    const mask = box('DIV', 'mask', { left: 200, top: 40, width: 40, height: 20, right: 240, bottom: 60 });
+    const button = box('BUTTON', 'go', { left: 200, top: 40, width: 40, height: 20, right: 240, bottom: 60 });
+    const nodes = [link, font, mask, button];
+
+    globalThis.getComputedStyle = (el, pseudo) => computedStyle(el, pseudo);
+    globalThis.window = { innerWidth: 800, innerHeight: 600 };
+    globalThis.document = {
+        documentElement: { clientWidth: 800, tagName: 'HTML', nodeType: 1 },
+        body: {
+            tagName: 'BODY',
+            nodeType: 1,
+            querySelectorAll() { return nodes; }
+        },
+        elementFromPoint(x, y) {
+            if (x >= 200 && x <= 240 && y >= 40 && y <= 60) return mask;
+            if (x >= 700 && x <= 807 && y >= 10 && y <= 30) return font;
+            return null;
+        },
+        styleSheets: []
+    };
+
+    try {
+        const shot = css.snapshot();
+        assert.equal(
+            shot.items.some((item) => item.rule === 'click blocked' && item.selector === 'font'),
+            false
+        );
+        const overflow = shot.items.filter((item) => item.rule === 'overflow');
+        assert.deepEqual(overflow.map((item) => item.selector), ['font']);
+        assert.equal(overflow[0].value, 'font overflows viewport');
+        const blocked = shot.items.find((item) => item.rule === 'click blocked');
+        assert.equal(blocked.selector, 'div#mask');
+        assert.equal(blocked.value, 'div#mask blocks clicks on 1 element');
+        css.detach();
+    } finally {
+        if (previousDocument === undefined) delete globalThis.document;
+        else globalThis.document = previousDocument;
+        if (previousStyle === undefined) delete globalThis.getComputedStyle;
+        else globalThis.getComputedStyle = previousStyle;
+        if (previousWindow === undefined) delete globalThis.window;
+        else globalThis.window = previousWindow;
+        bee.destroy();
+    }
+});
+
 function box(tag, id, rect, styleMap) {
     return {
         nodeType: 1,
@@ -507,14 +628,19 @@ function valuesOf(seen, key) {
 }
 
 function importantRule(selector, property, value) {
+    return importantSides(selector, { [property]: value });
+}
+
+function importantSides(selector, props) {
+    const names = Object.keys(props);
     return {
         type: 1,
         selectorText: selector,
         style: {
-            length: 1,
-            item() { return property; },
+            length: names.length,
+            item(index) { return names[index]; },
             getPropertyPriority() { return 'important'; },
-            getPropertyValue() { return value; }
+            getPropertyValue(property) { return props[property]; }
         }
     };
 }
@@ -711,6 +837,56 @@ test('fogli disabilitati o con media inattiva non entrano tra le !important', ()
         const values = css.snapshot().items.filter((item) => item.rule === '!important').map((item) => item.value).sort();
         assert.deepEqual(values, ['!important .hot { border: none }', '!important .hot { margin-top: 0 }']);
         assert.equal(css.snapshot().items.some((item) => item.rule === 'unreadable sheet'), false);
+    } finally {
+        dom.restore();
+        bee.destroy();
+    }
+});
+
+test('lo shorthand !important resta completo nell\'export e un altro foglio resta a parte', () => {
+    const hot = box('DIV', 'hot', RECT);
+    hot.matches = (selector) => selector === '.hot';
+    hot.classList = ['hot'];
+    hot.id = '';
+    const one = box('IMG', '', { left: 0, top: 0, width: 900, height: 20, right: 900, bottom: 20 });
+    const two = box('IMG', '', { left: 0, top: 30, width: 900, height: 20, right: 900, bottom: 50 });
+    for (const img of [one, two]) {
+        img.id = '';
+        img.classList = ['game-card__cover'];
+    }
+    const dom = installCssDom({
+        nodes: [hot, one, two],
+        styleSheets: [
+            {
+                cssRules: [importantSides('.hot', {
+                    'margin-top': '0px',
+                    'margin-right': '0px',
+                    'margin-bottom': '0px',
+                    'margin-left': '0px',
+                    color: 'red'
+                })]
+            },
+            {
+                href: 'https://cdn.example/other.css',
+                cssRules: [importantSides('.hot', { 'margin-top': '4px' })]
+            }
+        ]
+    });
+    const bee = makeCore();
+    const css = new CSSAdapter(bee);
+    css.attach();
+    try {
+        const report = exportReport(bee, { format: 'json' });
+        const section = report.adapters.find((item) => item.name === 'css');
+        const values = section.items.map((item) => item.value);
+        assert.ok(values.includes('!important .hot { margin: 0px }'));
+        assert.ok(values.includes('!important .hot { color: red }'));
+        assert.ok(values.includes('!important .hot { margin-top: 4px }'));
+        assert.equal(values.includes('img.game-card__cover overflows viewport ×2'), true);
+        const html = exportReport(bee, { format: 'html' });
+        assert.match(html, /margin: 0px/);
+        assert.match(html, /margin-top: 4px/);
+        assert.match(html, /img\.game-card__cover overflows viewport ×2/);
     } finally {
         dom.restore();
         bee.destroy();
