@@ -5,7 +5,7 @@
 [![download](https://img.shields.io/npm/dm/bee-ladybug)](https://www.npmjs.com/package/bee-ladybug)
 [![](https://data.jsdelivr.com/v1/package/npm/bee-ladybug/badge)](https://www.jsdelivr.com/package/npm/bee-ladybug)
 ![licenza](https://img.shields.io/npm/l/bee-ladybug)
-[![Socket Badge](https://badge.socket.dev/npm/package/bee-ladybug/0.6.8)](https://badge.socket.dev/npm/package/bee-ladybug/0.6.8)
+[![Socket Badge](https://badge.socket.dev/npm/package/bee-ladybug/0.6.9)](https://badge.socket.dev/npm/package/bee-ladybug/0.6.9)
 [![size](https://img.shields.io/bundlephobia/minzip/bee-ladybug)](https://bundlephobia.com/package/bee-ladybug)
 [![Snyk](https://snyk.io/test/npm/bee-ladybug/badge.svg)](https://security.snyk.io/package/npm/bee-ladybug)
 
@@ -23,7 +23,7 @@ dark console.
 
 > Il Core non sa cosa sta monitorando. Riceve solo dati grezzi.
 
-Versione attuale: **0.6.8** (`package.json` e `BEE_LADYBUG_VERSION`).
+Versione attuale: **0.6.9** (`package.json` e `BEE_LADYBUG_VERSION`).
 
 ## Perché questa struttura
 
@@ -365,7 +365,7 @@ npm login
 npm publish --access public
 ```
 
-Versione runtime e pacchetto: **0.6.8** (`BEE_LADYBUG_VERSION` e `package.json` devono restare uguali).
+Versione runtime e pacchetto: **0.6.9** (`BEE_LADYBUG_VERSION` e `package.json` devono restare uguali).
 
 ## Assistente AI (gancio, nessun vendor)
 
@@ -439,7 +439,7 @@ bee.destroy();
 
 ## Roadmap
 
-1. **0.6.8** — Core, adapter Canvas, DOM, CSS, Ant e Spider, PythonBridge, registro dei toggle, gancio AI multi-provider, export HTML/JSON/CSV, CSS hunt, pannello ridimensionabile con WIDE/COMPACT, trascinabile dall'header e riducibile a una pillola con la coccinella e gli FPS. L'overlay canvas resta trasparente anche se la pagina colora tutti i `canvas`. È la versione in `package.json` e in `BEE_LADYBUG_VERSION`.
+1. **0.6.9** — Core, adapter Canvas, DOM, CSS, Ant e Spider, PythonBridge, registro dei toggle, gancio AI multi-provider, export HTML/JSON/CSV, CSS hunt, pannello ridimensionabile con WIDE/COMPACT, trascinabile dall'header e riducibile a una pillola con la coccinella e gli FPS. L'overlay canvas resta trasparente anche se la pagina colora tutti i `canvas`. L'estensione, su una pagina con canvas, avvia solo CanvasAdapter e legge le entità da `window.__BEE_ENTITIES__`. È la versione in `package.json` e in `BEE_LADYBUG_VERSION`.
 
 ## Chrome extension
 
@@ -457,6 +457,8 @@ Poi in Chrome:
 3. **Carica estensione non pacchettizzata** e scegli la cartella `extension/`.
 
 Il pulsante **Attiva/Disattiva HUD** inietta l'HUD nella scheda attiva. Un secondo clic lo spegne senza ricaricare la pagina, un terzo lo riaccende. Su `chrome://` e sul Chrome Web Store il popup spiega che la pagina non si può ispezionare.
+
+Se la pagina ha un `canvas`, parte solo l'adapter Canvas (`autoPump`). DOM e CSS restano spenti e si accendono dai bottoni dell'HUD. Senza `canvas` partono DOM e CSS. Le entità non sono le variabili locali del gioco: il gioco le assegna a `window.__BEE_ENTITIES__` (un array di `{ name, x, y, width, height }`). Uno script nella pagina le invia all'HUD ogni 100 ms. Se la variabile manca, l'HUD scrive `nessuna entità: il gioco deve esporre window.__BEE_ENTITIES__`.
 
 Le icone in `extension/icons/` sono segnaposto. Rigenerale con `node scripts/generate-extension-icons.js`, oppure sostituisci `icon16.png`, `icon48.png` e `icon128.png`.
 

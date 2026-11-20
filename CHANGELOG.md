@@ -2,6 +2,10 @@
 <p align="center">
   <img src="https://beeenginejs.com/wp-content/uploads/2026/10/beeladybug-logo-animato-ezgif.com-effects.gif" alt="BeeEngine Logo" width="900" />
 </p>
+## 0.6.9
+
+- Chrome extension: a page with a canvas starts only CanvasAdapter (`autoPump`). DOM and CSS stay off until their HUD buttons. A page without a canvas starts DOM and CSS. Entities arrive from `window.__BEE_ENTITIES__` through a MAIN-world script that posts them every 100ms. Space and arrows no longer reactivate a focused HUD button.
+
 ## 0.6.8
 
 - Fixed: overlay canvas covered the game when the page styles all canvas elements. The same inline reset applies to the CanvasAdapter and WebDOMAdapter overlays. CSSAdapter draws with divs, so it has no canvas overlay to reset.

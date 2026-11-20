@@ -28,6 +28,11 @@ toggle.addEventListener('click', async () => {
         }
         await chrome.scripting.executeScript({
             target: { tabId: tab.id },
+            files: ['entity-bridge.js'],
+            world: 'MAIN'
+        });
+        await chrome.scripting.executeScript({
+            target: { tabId: tab.id },
             files: ['content.js'],
             world: 'MAIN'
         });
