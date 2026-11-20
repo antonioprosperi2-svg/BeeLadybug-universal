@@ -19,7 +19,7 @@ const LATEST_TYPES = Object.freeze([
 
 /**
  * @typedef {'html' | 'json' | 'csv'} ReportFormat
- * @typedef {'error' | 'warn' | 'ok'} ReportSeverity
+ * @typedef {'error' | 'warn' | 'info' | 'ok'} ReportSeverity
  * @typedef {{ severity: ReportSeverity, selector: string, rule: string, value: string, source: string }} ReportItem
  */
 
@@ -282,7 +282,7 @@ function groupIdentical(items) {
  * @param {Array<{ type: string, level: string | null }>} logs
  */
 function countFindings(adapters, logs) {
-    const summary = { error: 0, warn: 0, ok: 0 };
+    const summary = { error: 0, warn: 0, info: 0, ok: 0 };
     for (const section of adapters) {
         for (const item of section.items) summary[item.severity] += 1;
     }
@@ -307,6 +307,7 @@ function normalizeSeverity(value) {
     const text = String(value || '').toLowerCase();
     if (text === 'error') return 'error';
     if (text === 'warn' || text === 'warning' || text === 'warm') return 'warn';
+    if (text === 'info') return 'info';
     return 'ok';
 }
 
@@ -441,6 +442,7 @@ function renderHtml(report) {
   <div class="counts">
     <div class="count error"><b>${report.summary.error}</b>errors</div>
     <div class="count warn"><b>${report.summary.warn}</b>warnings</div>
+    <div class="count info"><b>${report.summary.info}</b>info</div>
     <div class="count ok"><b>${report.summary.ok}</b>ok</div>
   </div>
   <h2>CORE · LOG</h2>

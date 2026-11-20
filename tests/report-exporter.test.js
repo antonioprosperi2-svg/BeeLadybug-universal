@@ -57,8 +57,8 @@ test('exportReport JSON raccoglie log, serie e snapshot registrati', () => {
     assert.ok(report.logs.some((entry) => entry.type === 'warn' && entry.message === 'slow frame'));
     assert.equal(report.adapters.length, 1);
     assert.equal(report.adapters[0].name, 'probe');
-    assert.equal(report.adapters[0].items[1].severity, 'ok');
-    assert.deepEqual(report.summary, { error: 1, warn: 1, ok: 2 });
+    assert.equal(report.adapters[0].items[1].severity, 'info');
+    assert.deepEqual(report.summary, { error: 1, warn: 1, info: 1, ok: 1 });
     assert.equal(bee.ui, null);
 
     bee.destroy();

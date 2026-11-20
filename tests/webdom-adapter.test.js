@@ -530,3 +530,41 @@ test('domNoiseQuiet è esportata dall\'indice e segue la regola F6/F3', () => {
     assert.equal(domNoiseQuiet(true, false, 0.25), false);
     assert.equal(domNoiseQuiet(true, true, 0.25), true);
 });
+
+test('un img lazy non ancora caricato non è collapsed content', () => {
+    installStyles();
+    installFakeMutationObserver();
+    const bee = makeCore();
+    const waiting = makeNode({
+        id: 'wait',
+        tagName: 'IMG',
+        loading: 'lazy',
+        complete: false,
+        naturalWidth: 0,
+        styleMap: { paddingLeft: '200px' },
+        getAttribute(name) { return name === 'loading' ? 'lazy' : null; }
+    });
+    const ready = makeNode({
+        id: 'ready',
+        tagName: 'IMG',
+        loading: 'lazy',
+        complete: true,
+        naturalWidth: 80,
+        styleMap: { paddingLeft: '200px' },
+        getAttribute(name) { return name === 'loading' ? 'lazy' : null; }
+    });
+    const root = makeNode({
+        id: 'stage',
+        querySelectorAll() { return [waiting, ready]; }
+    });
+    const adapter = new WebDOMAdapter(bee, { root, overlay: false, autoTick: false });
+    adapter.attach();
+    try {
+        const items = adapter.snapshot().items.filter((item) => item.rule === 'collapsed content');
+        assert.equal(items.some((item) => item.selector === 'img#wait'), false);
+        assert.equal(items.some((item) => item.selector === 'img#ready'), true);
+    } finally {
+        adapter.detach();
+        bee.destroy();
+    }
+});

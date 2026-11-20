@@ -2,6 +2,10 @@
 <p align="center">
   <img src="https://beeenginejs.com/wp-content/uploads/2026/10/beeladybug-logo-animato-ezgif.com-effects.gif" alt="BeeEngine Logo" width="900" />
 </p>
+## 0.6.13
+
+- `!important` longhands from one CSS rule are one row, with `×N` when the same rule or cause repeats. Stacking context is info unless `elementFromPoint` shows the element is really covered. Click blockers ignore ancestors and descendants. sr-only, `aria-hidden`, scroll containers and unloaded lazy images are not reported as visible bugs. `!important`, negative margins, stacking and overflow inside a scroller are info.
+
 ## 0.6.12
 
 - Every HUD section keeps the opaque `#0d1117` background and the 6px blur in normal, WIDE, COMPACT and PILL. The header labels CORE, LIVE, WIDE, COMPACT and PILL use the same 6px corner radius as the footer buttons.

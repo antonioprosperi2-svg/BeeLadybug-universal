@@ -123,6 +123,22 @@ test('i lati !important della stessa regola diventano lo shorthand', () => {
         { property: 'border', value: '1px solid red' }
     ]);
     assert.deepEqual(collapseImportantProps([
+        { property: 'border-top-width', value: '2px' },
+        { property: 'border-right-width', value: '2px' },
+        { property: 'border-bottom-width', value: '2px' },
+        { property: 'border-left-width', value: '2px' },
+        { property: 'border-top-style', value: 'solid' },
+        { property: 'border-right-style', value: 'solid' },
+        { property: 'border-bottom-style', value: 'solid' },
+        { property: 'border-left-style', value: 'solid' },
+        { property: 'border-top-color', value: 'red' },
+        { property: 'border-right-color', value: 'red' },
+        { property: 'border-bottom-color', value: 'red' },
+        { property: 'border-left-color', value: 'red' }
+    ]), [
+        { property: 'border', value: '2px solid red' }
+    ]);
+    assert.deepEqual(collapseImportantProps([
         { property: 'border-top', value: '1px solid red' },
         { property: 'border-right', value: '0' },
         { property: 'border-bottom', value: '1px solid red' },
@@ -226,7 +242,7 @@ test('formatCause raggruppa i figli chiusi in uno stacking context', () => {
         }, 10);
     }
     assert.equal(list.length, 1);
-    assert.equal(list[0].level, 'error');
+    assert.equal(list[0].level, 'info');
     assert.equal(
         formatCause(list[0]),
         'div.hero creates stacking context (transform) - z-index of 3 children is trapped'
@@ -351,20 +367,20 @@ test('snapshot gira con la hunt spenta e salta nascosti e admin', () => {
         assert.equal(blocked.value, 'div#mask blocks clicks on 2 elements');
 
         const stack = shot.items.find((item) => item.rule === 'stacking context');
-        assert.equal(stack.severity, 'error');
+        assert.equal(stack.severity, 'info');
         assert.equal(
             stack.value,
             'div#hero creates stacking context (transform) - z-index of 1 child is trapped'
         );
         const layer = shot.items.find((item) => item.rule === 'will-change');
-        assert.equal(layer.severity, 'ok');
+        assert.equal(layer.severity, 'info');
         assert.equal(
             layer.value,
             'div#hint will-change: opacity — z-index of 1 child stays in this layer'
         );
 
         const important = shot.items.find((item) => item.rule === '!important');
-        assert.equal(important.severity, 'warn');
+        assert.equal(important.severity, 'info');
         assert.equal(important.selector, 'div.hot');
         assert.equal(important.value, '!important .hot { color: red }');
         const margin = shot.items.find((item) => item.rule === 'negative margin');
@@ -879,9 +895,9 @@ test('lo shorthand !important resta completo nell\'export e un altro foglio rest
         const report = exportReport(bee, { format: 'json' });
         const section = report.adapters.find((item) => item.name === 'css');
         const values = section.items.map((item) => item.value);
-        assert.ok(values.includes('!important .hot { margin: 0px }'));
-        assert.ok(values.includes('!important .hot { color: red }'));
+        assert.ok(values.includes('!important .hot { margin: 0px; color: red }'));
         assert.ok(values.includes('!important .hot { margin-top: 4px }'));
+        assert.equal(values.includes('!important .hot { color: red }'), false);
         assert.equal(values.includes('img.game-card__cover overflows viewport ×2'), true);
         const html = exportReport(bee, { format: 'html' });
         assert.match(html, /margin: 0px/);
@@ -895,7 +911,7 @@ test('lo shorthand !important resta completo nell\'export e un altro foglio rest
 
 test('snapshot tiene gli errori anche con molte cause will-change', () => {
     const hero = box('DIV', 'hero', RECT, { transform: 'translateZ(0)' });
-    const trapped = box('SPAN', 'trapped', RECT, { zIndex: '3' });
+    const trapped = box('SPAN', 'trapped', { left: 400, top: 400, width: 20, height: 16, right: 420, bottom: 416 }, { zIndex: '3' });
     trapped.parentElement = hero;
     const nodes = [hero, trapped];
     for (let i = 0; i < 100; i++) {
@@ -904,7 +920,11 @@ test('snapshot tiene gli errori anche con molte cause will-change', () => {
         floater.parentElement = layer;
         nodes.push(layer, floater);
     }
-    const dom = installCssDom({ nodes });
+    const cover = { nodeType: 1, contains() { return false; } };
+    const dom = installCssDom({
+        nodes,
+        hit: (x, y) => (x >= 400 && x <= 420 && y >= 400 && y <= 416 ? cover : null)
+    });
     const bee = makeCore();
     const css = new CSSAdapter(bee);
     css.attach();
@@ -913,7 +933,7 @@ test('snapshot tiene gli errori anche con molte cause will-change', () => {
         assert.equal(items.length, 80, 'taglio finale a MAX_SNAPSHOT');
         assert.equal(items[0].rule, 'stacking context');
         assert.equal(items[0].severity, 'error');
-        assert.equal(items.filter((item) => item.rule === 'will-change').length, 79);
+        assert.equal(items.filter((item) => item.rule === 'will-change').length, 78);
     } finally {
         dom.restore();
         bee.destroy();
@@ -998,3 +1018,110 @@ test('WebDOMAdapter non sceglie i box della caccia CSS come hover', () => {
         bee.destroy();
     }
 });
+
+test('una regola !important con i longhand del bordo è una sola riga info', () => {
+    const card = box('DIV', 'card', RECT);
+    card.matches = (selector) => selector === '.card';
+    const props = {};
+    for (const edge of ['top', 'right', 'bottom', 'left']) {
+        props[`border-${edge}-width`] = '1px';
+        props[`border-${edge}-style`] = 'solid';
+        props[`border-${edge}-color`] = 'red';
+    }
+    const dom = installCssDom({
+        nodes: [card],
+        styleSheets: [{ cssRules: [importantSides('.card', props)] }]
+    });
+    const bee = makeCore();
+    const css = new CSSAdapter(bee);
+    css.attach();
+    try {
+        const rows = css.snapshot().items.filter((item) => item.rule === '!important');
+        assert.equal(rows.length, 1);
+        assert.equal(rows[0].severity, 'info');
+        assert.equal(rows[0].value, '!important .card { border: 1px solid red }');
+    } finally {
+        dom.restore();
+        bee.destroy();
+    }
+});
+
+test('lo stacking è info finché elementFromPoint non trova una copertura', () => {
+    const hero = box('DIV', 'hero', RECT, { transform: 'translateZ(0)' });
+    const other = box('DIV', 'other', RECT, { transform: 'translateZ(0)' });
+    const open = box('SPAN', 'open', { left: 12, top: 12, width: 20, height: 16, right: 32, bottom: 28 }, { zIndex: '5' });
+    const covered = box('SPAN', 'covered', { left: 200, top: 40, width: 20, height: 16, right: 220, bottom: 56 }, { zIndex: '9' });
+    open.parentElement = hero;
+    covered.parentElement = other;
+    const mask = box('DIV', 'mask', RECT);
+    const dom = installCssDom({
+        nodes: [hero, other, open, covered],
+        hit: (x, y) => (x >= 200 && x <= 220 && y >= 40 && y <= 56 ? mask : null)
+    });
+    const bee = makeCore();
+    const css = new CSSAdapter(bee);
+    css.attach();
+    try {
+        const rows = css.snapshot().items.filter((item) => item.rule === 'stacking context');
+        assert.equal(rows.some((item) => item.severity === 'info'), true);
+        assert.equal(rows.some((item) => item.severity === 'error'), true);
+    } finally {
+        dom.restore();
+        bee.destroy();
+    }
+});
+
+test('un click bloccato da un antenato non si segnala, un overlay esterno sì', () => {
+    const button = box('BUTTON', 'go', { left: 10, top: 10, width: 80, height: 30, right: 90, bottom: 40 });
+    const icon = box('SPAN', 'icon', { left: 16, top: 14, width: 16, height: 16, right: 32, bottom: 30 });
+    icon.parentElement = button;
+    button.contains = (node) => node === icon || node === button;
+    const target = box('BUTTON', 'play', { left: 200, top: 10, width: 40, height: 20, right: 240, bottom: 30 });
+    const mask = box('DIV', 'mask', { left: 200, top: 10, width: 40, height: 20, right: 240, bottom: 30 });
+    const dom = installCssDom({
+        nodes: [button, icon, target],
+        hit: (x) => (x < 100 ? button : mask)
+    });
+    const bee = makeCore();
+    const css = new CSSAdapter(bee);
+    css.attach();
+    try {
+        const blocked = css.snapshot().items.filter((item) => item.rule === 'click blocked');
+        assert.equal(blocked.some((item) => item.selector === 'button#go'), false);
+        assert.equal(blocked.some((item) => item.value.includes('div#mask')), true);
+    } finally {
+        dom.restore();
+        bee.destroy();
+    }
+});
+
+test('sr-only, aria-hidden e uno scroller non producono margini o testo invisibile', () => {
+    const offscreen = { left: -40, top: 10, width: 80, height: 20, right: 40, bottom: 30 };
+    const sr = box('SPAN', 'sr', offscreen, { width: '1px', height: '1px', clip: 'rect(0px, 0px, 0px, 0px)', marginLeft: '-1px', color: 'transparent' });
+    sr.textContent = 'skip';
+    const hidden = box('DIV', 'quiet', offscreen, { marginLeft: '-8px', color: 'transparent' });
+    hidden.textContent = 'nascosto';
+    hidden.getAttribute = (name) => (name === 'aria-hidden' ? 'true' : null);
+    const scroller = box('DIV', 'scroller', RECT, { overflow: 'auto' });
+    const inner = box('SPAN', 'inner', offscreen, { marginLeft: '-4px', color: 'transparent' });
+    inner.textContent = 'dentro';
+    inner.parentElement = scroller;
+    const dom = installCssDom({ nodes: [sr, hidden, scroller, inner] });
+    const bee = makeCore();
+    const css = new CSSAdapter(bee);
+    css.attach();
+    try {
+        const items = css.snapshot().items;
+        for (const id of ['sr', 'quiet', 'inner']) {
+            assert.equal(items.some((item) => item.selector.includes(id) && item.rule === 'negative margin'), false, id);
+            assert.equal(items.some((item) => item.selector.includes(id) && item.rule === 'invisible text'), false, id);
+        }
+        assert.equal(items.some((item) => item.selector === 'span#sr' && item.rule === 'overflow'), false);
+        const scrolled = items.find((item) => item.selector === 'span#inner' && item.rule === 'overflow');
+        assert.equal(scrolled.severity, 'info');
+    } finally {
+        dom.restore();
+        bee.destroy();
+    }
+});
+

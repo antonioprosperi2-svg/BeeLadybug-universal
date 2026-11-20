@@ -184,14 +184,14 @@ export class CSSAdapter {
                 selector: cssPath(cause.el),
                 kind: 'overflows viewport',
                 rank: 0,
-                level: 'error',
+                level: overflowLevel(cause.el),
                 score: cause.score
             });
         }
         const groups = groupIssues(rows);
         for (let i = 0; i < rows.length; i++) {
             const row = rows[i];
-            this.#rememberCause(row.el, row.selector, row.kind);
+            this.#rememberCause(row.el, row.selector, row.kind, row.level);
         }
         this.#publishIssues();
         const shown = groups.slice(0, this.maxScan);
@@ -256,7 +256,7 @@ export class CSSAdapter {
                 selector: cssPath(cause.el),
                 kind: 'overflows viewport',
                 rank: 0,
-                level: 'error',
+                level: overflowLevel(cause.el),
                 score: cause.score
             });
         }
@@ -268,7 +268,7 @@ export class CSSAdapter {
             if (describeCause(row.kind, row.selector)) {
                 // No cap here: MAX_SNAPSHOT applies after the severity sort, so an info row
                 // can never push a real error out.
-                causes = addCause(causes, { kind: row.kind, path: row.selector, el: row.el }, Infinity);
+                causes = addCause(causes, { kind: row.kind, path: row.selector, el: row.el, level: row.level }, Infinity);
             } else {
                 plain.push(row);
             }
@@ -485,13 +485,13 @@ export class CSSAdapter {
         for (let i = 0; i < findings.length; i++) {
             const hit = findings[i];
             if (hit.kind === 'overflows viewport' && !elementCausesOverflow(el)) continue;
-            if (this.#rememberCause(el, path, hit.kind)) changed = true;
+            if (this.#rememberCause(el, path, hit.kind, hit.level)) changed = true;
         }
         if (changed) this.#publishIssues();
     }
 
-    #rememberCause(el, path, kind) {
-        const next = addCause(this.#issues, { kind, path, el }, this.maxIssues);
+    #rememberCause(el, path, kind, level) {
+        const next = addCause(this.#issues, { kind, path, el, level }, this.maxIssues);
         if (next === this.#issues) return false;
         this.#issues = next;
         return true;
@@ -647,12 +647,56 @@ export function collapseImportantProps(props) {
         for (let s = 0; s < family.sides.length; s++) used.add(family.sides[s]);
         collapsed.push({ property: family.shorthand, value: boxShorthand(values) });
     }
+    collapseBorderLonghands(byName, used, collapsed);
     const out = collapsed.slice();
     for (let i = 0; i < list.length; i++) {
         if (used.has(list[i].property)) continue;
         out.push(list[i]);
     }
     return out;
+}
+
+const BORDER_EDGES = Object.freeze(['top', 'right', 'bottom', 'left']);
+const BORDER_PARTS = Object.freeze(['width', 'style', 'color']);
+
+/**
+ * `border-top-width` … `border-left-color` from one rule are one border,
+ * not a row per longhand. A part collapses only when its four sides match.
+ */
+function collapseBorderLonghands(byName, used, collapsed) {
+    const got = {};
+    for (let i = 0; i < BORDER_PARTS.length; i++) {
+        const part = BORDER_PARTS[i];
+        const values = [];
+        for (let e = 0; e < BORDER_EDGES.length; e++) {
+            const name = `border-${BORDER_EDGES[e]}-${part}`;
+            if (!byName.has(name)) {
+                values.length = 0;
+                break;
+            }
+            values.push(byName.get(name));
+        }
+        if (values.length === 4 && values.every((value) => value === values[0])) got[part] = values[0];
+    }
+    const parts = Object.keys(got);
+    if (!parts.length) return;
+    if (got.width && got.style && got.color) {
+        markBorderParts(used, BORDER_PARTS);
+        collapsed.push({ property: 'border', value: `${got.width} ${got.style} ${got.color}` });
+        return;
+    }
+    markBorderParts(used, parts);
+    for (let i = 0; i < parts.length; i++) {
+        collapsed.push({ property: `border-${parts[i]}`, value: got[parts[i]] });
+    }
+}
+
+function markBorderParts(used, parts) {
+    for (let i = 0; i < parts.length; i++) {
+        for (let e = 0; e < BORDER_EDGES.length; e++) {
+            used.add(`border-${BORDER_EDGES[e]}-${parts[i]}`);
+        }
+    }
 }
 
 function boxShorthand(values) {
@@ -680,28 +724,28 @@ function pushImportant(el, rules, findings) {
         } catch {
             continue;
         }
-        if (!matched) continue;
-        for (let j = 0; j < rule.props.length; j++) {
-            const prop = rule.props[j];
-            findings.push({
-                level: 'warn',
-                rank: 4,
-                score: 5,
-                kind: `!important ${rule.selector} { ${prop.property}: ${prop.value} }`,
-                text: `!important ${rule.selector} { ${prop.property}: ${prop.value} } @ ${rule.source}`
-            });
-        }
+        if (!matched || !rule.props.length) continue;
+        const body = rule.props.map((prop) => `${prop.property}: ${prop.value}`).join('; ');
+        const decl = `!important ${rule.selector} { ${body} }`;
+        findings.push({
+            level: 'info',
+            rank: 4,
+            score: rule.props.length,
+            kind: decl,
+            text: `${decl} @ ${rule.source}`
+        });
     }
 }
 
 function pushOverflow(el, findings) {
+    if (isQuietHide(el)) return;
     const measured = measureViewportOverflow(el);
     if (measured) {
         const past = measured.left > 1
             ? `left ${Math.round(-measured.left)}px`
             : `right +${Math.round(measured.right)}px`;
         findings.push({
-            level: 'error',
+            level: overflowLevel(el),
             rank: 0,
             score: measured.score,
             kind: 'overflows viewport',
@@ -715,6 +759,7 @@ function measureViewportOverflow(el) {
     if (!el || typeof el.getBoundingClientRect !== 'function') return null;
     if (typeof document === 'undefined') return null;
     if (el === document.documentElement || el === document.body) return null;
+    if (isQuietHide(el)) return null;
     const rect = el.getBoundingClientRect();
     const view = document.documentElement.clientWidth;
     const left = rect.left < -1 ? -rect.left : 0;
@@ -763,7 +808,7 @@ function fitsOnlyBecauseOfChild(item, items) {
 }
 
 function pushNegativeMargins(el, findings) {
-    if (typeof getComputedStyle !== 'function') return;
+    if (typeof getComputedStyle !== 'function' || isQuietHide(el) || insideClippingContainer(el)) return;
     const style = getComputedStyle(el);
     const sides = ['top', 'right', 'bottom', 'left'];
     for (let i = 0; i < sides.length; i++) {
@@ -771,7 +816,7 @@ function pushNegativeMargins(el, findings) {
         const value = parseFloat(raw);
         if (!Number.isFinite(value) || value >= 0) continue;
         findings.push({
-            level: 'warn',
+            level: 'info',
             rank: 5,
             score: Math.abs(value),
             kind: `negative margin margin-${sides[i]}: ${raw.trim()}`,
@@ -819,7 +864,7 @@ export function formatIssue(group) {
 }
 
 function pushInvisible(el, findings) {
-    if (!hasOwnText(el)) return;
+    if (!hasOwnText(el) || isQuietHide(el) || insideClippingContainer(el)) return;
     const style = getComputedStyle(el);
     if (opacityZero(el)) {
         findings.push(issue('invisible text (opacity 0)', ISSUE_RANK.invisible, 30));
@@ -848,7 +893,9 @@ function pushBlockers(el, findings, skipNoise = false) {
         findings.push(issue(`click blocked by ${pseudo}`, ISSUE_RANK.blocker, 40));
     }
     const hit = document.elementFromPoint(x, y);
-    if (!hit || isBeeChrome(hit) || hit === el || el.contains(hit)) return;
+    if (!hit || isBeeChrome(hit) || hit === el) return;
+    if (typeof el.contains === 'function' && el.contains(hit)) return;
+    if (typeof hit.contains === 'function' && hit.contains(el)) return;
     if (pseudo && (hit === document.documentElement || hit === document.body)) return;
     if (skipNoise && isReportNoise(hit)) return;
     findings.push(issue(`click blocked by ${cssPath(hit)}`, ISSUE_RANK.blocker, 40));
@@ -933,7 +980,7 @@ export function describeCause(kind, path) {
             type: 'stack',
             cause: stack[2],
             reason: stack[1],
-            level: 'error'
+            level: 'info'
         };
     }
     const hint = typeof kind === 'string' ? kind.match(/^will-change (.+?) by (.+)$/) : null;
@@ -971,7 +1018,7 @@ export function addCause(list, entry, max = 10) {
         type: described.type,
         cause: described.cause,
         reason: described.reason || '',
-        level: described.level || 'error',
+        level: causeLevel(entry, prev, described),
         targets
     });
     return rest.slice(0, max);
@@ -1047,7 +1094,7 @@ function pushStacking(el, findings, skipNoise = false) {
         if (found.bugs.length) {
             const reason = found.bugs[0];
             findings.push({
-                level: 'error',
+                level: stackingIsCovered(el) ? 'error' : 'info',
                 rank: ISSUE_RANK.stack,
                 score: 35,
                 kind: `stacking context (${reason}) by ${ancestor}`,
@@ -1114,16 +1161,112 @@ function nowMs() {
     return typeof performance !== 'undefined' ? performance.now() : Date.now();
 }
 
+function causeLevel(entry, prev, described) {
+    if (entry.level === 'error' || (prev && prev.level === 'error')) return 'error';
+    return entry.level || described.level || 'info';
+}
+
+function isQuietHide(el) {
+    if (!el || el.nodeType !== 1 || typeof document === 'undefined') return false;
+    return hasAriaHidden(el) || isSrOnly(el);
+}
+
+function overflowLevel(el) {
+    return insideClippingContainer(el) ? 'info' : 'error';
+}
+
+function hasAriaHidden(el) {
+    let node = el;
+    while (node && node.nodeType === 1) {
+        if (readAttr(node, 'aria-hidden') === 'true') return true;
+        node = node.parentElement;
+    }
+    return false;
+}
+
+function readAttr(el, name) {
+    if (!el || typeof el.getAttribute !== 'function') return '';
+    const value = el.getAttribute(name);
+    return value == null ? '' : String(value);
+}
+
+function readStyle(style, prop, camel) {
+    if (style && typeof style.getPropertyValue === 'function') {
+        const raw = style.getPropertyValue(prop);
+        if (raw) return String(raw).trim();
+    }
+    if (style && style[camel] != null && style[camel] !== '') return String(style[camel]).trim();
+    return '';
+}
+
+function isSrOnly(el) {
+    if (typeof getComputedStyle !== 'function') return false;
+    let style = null;
+    try {
+        style = getComputedStyle(el);
+    } catch {
+        return false;
+    }
+    if (!style) return false;
+    const width = parseFloat(readStyle(style, 'width', 'width'));
+    const height = parseFloat(readStyle(style, 'height', 'height'));
+    const tiny = (Number.isFinite(width) && width <= 1) || (Number.isFinite(height) && height <= 1);
+    if (!tiny) return false;
+    const clip = readStyle(style, 'clip', 'clip');
+    const clipPath = readStyle(style, 'clip-path', 'clipPath');
+    return (clip && clip !== 'auto' && clip !== 'none') || (clipPath && clipPath !== 'none');
+}
+
+function insideClippingContainer(el) {
+    let node = el.parentElement;
+    while (node && node.nodeType === 1) {
+        if (node === document.body || node === document.documentElement) break;
+        if (elementClips(node)) return true;
+        node = node.parentElement;
+    }
+    return false;
+}
+
+function elementClips(el) {
+    if (typeof getComputedStyle !== 'function') return false;
+    let style = null;
+    try {
+        style = getComputedStyle(el);
+    } catch {
+        return false;
+    }
+    const ox = readStyle(style, 'overflow-x', 'overflowX') || readStyle(style, 'overflow', 'overflow');
+    const oy = readStyle(style, 'overflow-y', 'overflowY') || readStyle(style, 'overflow', 'overflow');
+    return ox === 'hidden' || ox === 'auto' || ox === 'scroll' || ox === 'clip'
+        || oy === 'hidden' || oy === 'auto' || oy === 'scroll' || oy === 'clip';
+}
+
+function stackingIsCovered(el) {
+    if (!el || typeof el.getBoundingClientRect !== 'function' || typeof document === 'undefined') return false;
+    if (typeof document.elementFromPoint !== 'function') return false;
+    const rect = el.getBoundingClientRect();
+    const x = rect.left + rect.width / 2;
+    const y = rect.top + rect.height / 2;
+    if (typeof window !== 'undefined' && (x < 0 || y < 0 || x > window.innerWidth || y > window.innerHeight)) return false;
+    const hit = document.elementFromPoint(x, y);
+    if (!hit || hit === el || isBeeChrome(hit)) return false;
+    if (typeof el.contains === 'function' && el.contains(hit)) return false;
+    if (typeof hit.contains === 'function' && hit.contains(el)) return false;
+    return true;
+}
+
 function reportSeverity(level) {
     if (level === 'error') return 'error';
     if (level === 'warn' || level === 'warning') return 'warn';
+    if (level === 'info') return 'info';
     return 'ok';
 }
 
 function severityRank(level) {
     if (level === 'error') return 0;
     if (level === 'warn') return 1;
-    return 2;
+    if (level === 'info') return 2;
+    return 3;
 }
 
 function causeRule(type) {

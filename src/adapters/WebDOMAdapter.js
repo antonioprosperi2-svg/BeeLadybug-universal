@@ -671,17 +671,18 @@ function problemItems(root, source) {
         seen.add(node);
         const style = styleOf(node);
         const margin = sideText(style, 'margin');
-        if (hasNegative(margin)) {
-            items.push(problemItem(node, 'negative margin', margin, source));
+        if (hasNegative(margin) && !isQuietProblem(node)) {
+            items.push(problemItem(node, 'negative margin', margin, source, 'info'));
             if (items.length >= MAX_PROBLEM_ROWS) break;
         }
         const clip = clipValue(node);
-        if (clip) {
+        if (clip && !isQuietProblem(node) && !insideClippingContainer(node) && !elementClips(node)) {
             items.push(problemItem(node, 'clipped', clip, source));
             if (items.length >= MAX_PROBLEM_ROWS) break;
         }
         const model = boxModel(node);
         if (model.border.w > 0 && model.border.h > 0 && (model.content.w === 0 || model.content.h === 0)) {
+            if (isUnloadedLazyImage(node)) continue;
             items.push(problemItem(
                 node,
                 'collapsed content',
@@ -693,14 +694,75 @@ function problemItems(root, source) {
     return items;
 }
 
-function problemItem(node, rule, value, source) {
+function problemItem(node, rule, value, source, severity = 'warn') {
     return {
-        severity: 'warn',
+        severity,
         selector: cssPath(node),
         rule,
         value,
         source
     };
+}
+
+function isQuietProblem(node) {
+    return isSrOnly(node) || hasAriaHidden(node);
+}
+
+function hasAriaHidden(el) {
+    let node = el;
+    while (node && node.nodeType === 1) {
+        if (typeof node.getAttribute === 'function' && node.getAttribute('aria-hidden') === 'true') return true;
+        node = node.parentElement;
+    }
+    return false;
+}
+
+function isSrOnly(el) {
+    if (typeof getComputedStyle !== 'function') return false;
+    let style = null;
+    try {
+        style = getComputedStyle(el);
+    } catch {
+        return false;
+    }
+    if (!style) return false;
+    const width = parseFloat(style.width || '');
+    const height = parseFloat(style.height || '');
+    const tiny = (Number.isFinite(width) && width <= 1) || (Number.isFinite(height) && height <= 1);
+    if (!tiny) return false;
+    const clip = String(style.clip || '');
+    const clipPath = String(style.clipPath || '');
+    return (clip && clip !== 'auto' && clip !== 'none') || (clipPath && clipPath !== 'none');
+}
+
+function elementClips(el) {
+    if (typeof getComputedStyle !== 'function') return false;
+    let style = null;
+    try {
+        style = getComputedStyle(el);
+    } catch {
+        return false;
+    }
+    const value = `${style.overflow || ''} ${style.overflowX || ''} ${style.overflowY || ''}`;
+    return /\b(hidden|auto|scroll|clip)\b/.test(value);
+}
+
+function insideClippingContainer(el) {
+    let node = el && el.parentElement;
+    while (node && node.nodeType === 1) {
+        if (typeof document !== 'undefined' && (node === document.body || node === document.documentElement)) break;
+        if (elementClips(node)) return true;
+        node = node.parentElement;
+    }
+    return false;
+}
+
+function isUnloadedLazyImage(node) {
+    if (!node || String(node.tagName || '').toUpperCase() !== 'IMG') return false;
+    const loading = typeof node.getAttribute === 'function' ? node.getAttribute('loading') : node.loading;
+    if (String(loading || node.loading || '').toLowerCase() !== 'lazy') return false;
+    if (node.complete === false) return true;
+    return !Number(node.naturalWidth);
 }
 
 function hasNegative(sides) {

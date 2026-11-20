@@ -110,7 +110,7 @@ export interface AssistantProvider {
 }
 
 export type ReportFormat = 'html' | 'json' | 'csv';
-export type ReportSeverity = 'error' | 'warn' | 'ok';
+export type ReportSeverity = 'error' | 'warn' | 'info' | 'ok';
 
 export interface ReportItem {
     severity: ReportSeverity;
