@@ -45,7 +45,7 @@ const STYLES = `
   resize: both;
   display: flex;
   flex-direction: column;
-npm  background: rgba(13, 17, 23, 0.96);
+  background: rgba(13, 17, 23, 0.96);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
   border: 1px solid rgba(255, 59, 78, 0.55);
@@ -163,7 +163,8 @@ npm  background: rgba(13, 17, 23, 0.96);
   letter-spacing: 0.08em;
   color: #6ee7ff;
   border: 1px solid rgba(110, 231, 255, 0.35);
-  padding: 1px 5px;
+  border-radius: 6px;
+  padding: 4px 6px;
 }
 .bl-mode-wrap {
   margin-left: auto;
@@ -177,6 +178,9 @@ npm  background: rgba(13, 17, 23, 0.96);
   font-weight: 700;
   letter-spacing: 0.08em;
   color: #3eea7a;
+  border: 1px solid rgba(62, 234, 122, 0.45);
+  border-radius: 6px;
+  padding: 4px 6px;
 }
 .bl-mode[data-mode="FREEZE"] { color: #ff3b4e; }
 .bl-mode[data-mode^="SLOW"] { color: #ffd36a; }
@@ -300,7 +304,6 @@ npm  background: rgba(13, 17, 23, 0.96);
   min-height: 140px;
   overflow: auto;
   padding: 0;
-  background: #05060a;
   border-top: 1px solid rgba(255, 59, 78, 0.22);
   font-size: 12px;
   line-height: 1.45;
@@ -389,6 +392,22 @@ npm  background: rgba(13, 17, 23, 0.96);
 .bl-hotkeys:empty {
   display: none;
 }
+.bl-scroll,
+.bl-section,
+.bl-section-body,
+.bl-stats,
+.bl-graph-wrap,
+.bl-hud,
+.bl-foot,
+.bl-issues,
+.bl-legend,
+.bl-detail,
+.bl-console,
+.bl-section-toggle {
+  background: rgba(13, 17, 23, 0.96);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
 .bl-scroll {
   overflow: auto;
   min-height: 0;
@@ -420,7 +439,6 @@ npm  background: rgba(13, 17, 23, 0.96);
   padding: 6px 10px;
   border: 0;
   border-top: 1px solid rgba(255, 59, 78, 0.28);
-  background: #101218;
   color: #ffd36a;
   font: 700 12px ui-monospace, Consolas, monospace;
   letter-spacing: 0.14em;
@@ -431,7 +449,9 @@ npm  background: rgba(13, 17, 23, 0.96);
 .bl-section[data-open="false"] > .bl-section-toggle::before { content: "▸  "; }
 .bl-section[data-open="false"] > .bl-section-body { display: none; }
 .bl-issues {
-  background: #07080c;
+  background: rgba(13, 17, 23, 0.96);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
 .bl-legend {
   display: flex;
@@ -476,7 +496,6 @@ npm  background: rgba(13, 17, 23, 0.96);
 .bl-detail {
   max-height: 132px;
   overflow: auto;
-  background: #07080c;
   border-top: 1px solid rgba(255, 59, 78, 0.22);
 }
 .bl-detail[hidden] {

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "BeeLadybug",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Inspect DOM layout and CSS issues on any page: overflow, blocked clicks, !important conflicts. Export a full HTML report.",
   "permissions": ["activeTab", "scripting"],
   "action": {

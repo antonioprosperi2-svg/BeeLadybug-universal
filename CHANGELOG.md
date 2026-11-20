@@ -2,6 +2,10 @@
 <p align="center">
   <img src="https://beeenginejs.com/wp-content/uploads/2026/10/beeladybug-logo-animato-ezgif.com-effects.gif" alt="BeeEngine Logo" width="900" />
 </p>
+## 0.6.12
+
+- Every HUD section keeps the opaque `#0d1117` background and the 6px blur in normal, WIDE, COMPACT and PILL. The header labels CORE, LIVE, WIDE, COMPACT and PILL use the same 6px corner radius as the footer buttons.
+
 ## 0.6.11
 
 - The extension popup closes after it injects the HUD, so Space returns to the page instead of pressing the toolbar button again. A Space keydown in the content script still only blurs a focused HUD button and does not hide the panel.
