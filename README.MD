@@ -13,6 +13,7 @@
   <img src="https://beeenginejs.com/wp-content/uploads/2026/10/beeladybug-logo-animato-ezgif.com-effects.gif" alt="BeeEngine Logo" width="900" />
 </p>
 
+Storico completo, dalla versione più recente alla più vecchia: [CHANGELOG.md](https://github.com/antonioprosperi2-svg/BeeLadybug-universal/blob/main/CHANGELOG.md)
 
 Universal telemetry and visual inspection overlay.
 
