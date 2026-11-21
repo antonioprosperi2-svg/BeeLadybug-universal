@@ -38,9 +38,9 @@ test('F8 export dal core restituisce JSON in headless', () => {
     assert.equal(CORE_DEFAULTS.exportKey, 'F8');
     const bee = makeCore();
     assert.equal(bee.exportKey, 'F8');
-    assert.equal(bee.version, '0.6.13');
+    assert.equal(bee.version, '0.6.14');
     const report = bee.exportReport('json');
-    assert.equal(report.version, '0.6.13');
+    assert.equal(report.version, '0.6.14');
     assert.equal(typeof bee.exportReport('html'), 'string');
     bee.destroy();
 });

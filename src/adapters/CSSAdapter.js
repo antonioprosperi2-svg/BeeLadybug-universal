@@ -158,6 +158,7 @@ export class CSSAdapter {
         if (!this.#active || typeof document === 'undefined') return this;
         if (this.#sheetsDirty) this.#rebuildSheets();
         const nodes = document.body ? document.body.querySelectorAll('*') : [];
+        resetCookieCover();
         const overflow = [];
         const rows = [];
         for (let i = 0; i < nodes.length; i++) {
@@ -188,6 +189,8 @@ export class CSSAdapter {
                 score: cause.score
             });
         }
+        const banner = takeCookieCover();
+        if (banner) rows.push(banner);
         const groups = groupIssues(rows);
         for (let i = 0; i < rows.length; i++) {
             const row = rows[i];
@@ -230,6 +233,7 @@ export class CSSAdapter {
 
         const built = collectImportantRules();
         const nodes = document.body.querySelectorAll('*');
+        resetCookieCover();
         const overflow = [];
         const rows = [];
         for (let i = 0; i < nodes.length; i++) {
@@ -260,6 +264,8 @@ export class CSSAdapter {
                 score: cause.score
             });
         }
+        const banner = takeCookieCover();
+        if (banner) rows.push(banner);
 
         let causes = [];
         const plain = [];
@@ -417,10 +423,13 @@ export class CSSAdapter {
             return;
         }
         const findings = [];
+        resetCookieCover();
         pushImportant(el, this.#rules, findings);
         pushOverflow(el, findings);
         pushInvisible(el, findings);
         pushBlockers(el, findings, true);
+        const banner = takeCookieCover();
+        if (banner) findings.push(banner);
         pushImage(el, findings);
         pushStacking(el, findings, true);
         const path = cssPath(el);
@@ -527,8 +536,9 @@ export class CSSAdapter {
                     onSelect: () => this.#pin(target.el)
                 }))
             };
-            if (entry.level === 'info') notes.push({ ...item, level: 'info' });
-            else bugs.push({ ...item, level: 'error' });
+            const level = entry.level === 'info' || entry.level === 'warn' ? entry.level : 'error';
+            if (level === 'info') notes.push({ ...item, level });
+            else bugs.push({ ...item, level });
         }
         this.core?.publishIssues(bugs.concat(notes));
     }
@@ -860,6 +870,9 @@ export function groupIssues(rows) {
 
 export function formatIssue(group) {
     const count = group.count > 1 ? ` ×${group.count}` : '';
+    if (typeof group.kind === 'string' && group.kind.startsWith('click blocked by ')) {
+        return `${group.selector} possible click blocked (verify)${count}`;
+    }
     return `${group.selector} ${group.kind}${count}`;
 }
 
@@ -882,23 +895,77 @@ function pushInvisible(el, findings) {
     }
 }
 
+const SVG_HIT_TAGS = new Set(['svg', 'path', 'circle', 'ellipse', 'rect', 'polygon']);
+const COOKIE_MARK = /cookie|consent|onetrust|ot-sdk|cookiebot/i;
+let cookieCover = null;
+
 function pushBlockers(el, findings, skipNoise = false) {
     if (!el.getBoundingClientRect || typeof document.elementFromPoint !== 'function') return;
+    if (isCookieBanner(el)) return;
     const rect = el.getBoundingClientRect();
     const x = rect.left + rect.width / 2;
     const y = rect.top + rect.height / 2;
     if (x < 0 || y < 0 || x > window.innerWidth || y > window.innerHeight) return;
     const pseudo = coveringPseudo(x, y);
-    if (pseudo) {
-        findings.push(issue(`click blocked by ${pseudo}`, ISSUE_RANK.blocker, 40));
-    }
+    if (pseudo) findings.push(blockerFinding(pseudo));
     const hit = document.elementFromPoint(x, y);
     if (!hit || isBeeChrome(hit) || hit === el) return;
     if (typeof el.contains === 'function' && el.contains(hit)) return;
     if (typeof hit.contains === 'function' && hit.contains(el)) return;
+    if (isSvgHit(hit)) return;
     if (pseudo && (hit === document.documentElement || hit === document.body)) return;
     if (skipNoise && isReportNoise(hit)) return;
-    findings.push(issue(`click blocked by ${cssPath(hit)}`, ISSUE_RANK.blocker, 40));
+    if (isCookieBanner(hit)) {
+        if (!cookieCover) cookieCover = hit;
+        return;
+    }
+    findings.push(blockerFinding(cssPath(hit)));
+}
+
+function blockerFinding(by) {
+    return {
+        level: 'warn',
+        rank: ISSUE_RANK.blocker,
+        score: 40,
+        kind: `click blocked by ${by}`,
+        text: 'possible click blocked (verify)'
+    };
+}
+
+function resetCookieCover() {
+    cookieCover = null;
+}
+
+function takeCookieCover() {
+    const hit = cookieCover;
+    cookieCover = null;
+    if (!hit) return null;
+    return {
+        el: hit,
+        selector: cssPath(hit),
+        kind: 'cookie banner open, covering page',
+        text: 'cookie banner open, covering page',
+        level: 'info',
+        rank: ISSUE_RANK.hint,
+        score: 1
+    };
+}
+
+function isSvgHit(el) {
+    return SVG_HIT_TAGS.has(String(el && el.tagName || '').toLowerCase());
+}
+
+function isCookieBanner(el) {
+    let node = el;
+    while (node && node.nodeType === 1) {
+        const id = node.id || '';
+        let cls = '';
+        if (typeof node.className === 'string') cls = node.className;
+        else if (node.className && typeof node.className.baseVal === 'string') cls = node.className.baseVal;
+        if (COOKIE_MARK.test(`${id} ${cls}`)) return true;
+        node = node.parentElement;
+    }
+    return false;
 }
 
 function pushImage(el, findings) {
@@ -971,7 +1038,7 @@ export function describeCause(kind, path) {
     const prefix = 'click blocked by ';
     if (typeof kind === 'string' && kind.startsWith(prefix)) {
         const cause = kind.slice(prefix.length);
-        return { key: `block\0${cause}`, type: 'block', cause, reason: '', level: 'error' };
+        return { key: `block\0${cause}`, type: 'block', cause, reason: '', level: 'warn' };
     }
     const stack = typeof kind === 'string' ? kind.match(/^stacking context \(([^)]+)\) by (.+)$/) : null;
     if (stack) {
@@ -1026,10 +1093,7 @@ export function addCause(list, entry, max = 10) {
 
 export function formatCause(entry) {
     const count = entry.targets.length;
-    if (entry.type === 'block') {
-        const noun = count === 1 ? 'element' : 'elements';
-        return `${entry.cause} blocks clicks on ${count} ${noun}`;
-    }
+    if (entry.type === 'block') return 'possible click blocked (verify)';
     if (entry.type === 'stack') {
         const noun = count === 1 ? 'child' : 'children';
         return `${entry.cause} creates stacking context (${entry.reason}) - z-index of ${count} ${noun} is trapped`;

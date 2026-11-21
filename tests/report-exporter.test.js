@@ -270,3 +270,34 @@ test('il download si chiama report-AAAAMMGG-HHMM.html', () => {
         bee.destroy();
     }
 });
+
+test('l\'HTML filtra le gravità, raggruppa !important e omette gli skip link', () => {
+    const bee = makeCore();
+    bee.registerAdapter('css', {
+        enable() {},
+        disable() {},
+        snapshot() {
+            return {
+                name: 'css',
+                items: [
+                    { severity: 'info', selector: 'div.a', rule: '!important', value: '!important .hot { color: red }', source: 'css' },
+                    { severity: 'info', selector: 'div.b', rule: '!important', value: '!important .hot { color: red }', source: 'css' },
+                    { severity: 'info', selector: 'button#uw-skip-to-main', rule: 'invisible text', value: 'invisible text (opacity 0)', source: 'css' },
+                    { severity: 'error', selector: 'p.note', rule: 'invisible text', value: 'invisible text (opacity 0)', source: 'css' }
+                ]
+            };
+        }
+    });
+    const json = exportReport(bee, { format: 'json' });
+    assert.equal(json.adapters[0].items.length, 4);
+    const html = exportReport(bee, { format: 'html' });
+    assert.match(html, /data-filter="error"/);
+    assert.match(html, /mostra info \(1\)/);
+    assert.match(html, /class="hide-info"/);
+    assert.match(html, /<summary>2 elementi<\/summary>/);
+    assert.match(html, /<li>div\.a<\/li>/);
+    assert.match(html, /<li>div\.b<\/li>/);
+    assert.equal(html.includes('button#uw-skip-to-main'), false);
+    assert.match(html, /p\.note/);
+    bee.destroy();
+});

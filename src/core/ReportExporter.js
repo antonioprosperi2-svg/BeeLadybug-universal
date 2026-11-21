@@ -387,7 +387,15 @@ function renderHtml(report) {
     const viewport = report.viewport
         ? `${report.viewport.width}×${report.viewport.height}`
         : 'n/a';
-    const sections = report.adapters.map((section) => renderSection(section)).join('\n');
+    const adapters = report.adapters.map((section) => {
+        const items = section.items.filter((item) => !isFocusSkipOpacity(item));
+        return {
+            name: section.name,
+            items: section.name === 'css' ? groupImportantRows(items) : items
+        };
+    });
+    const summary = htmlSummary(report, adapters);
+    const sections = adapters.map((section) => renderSection(section)).join('\n');
 
     return `<!DOCTYPE html>
 <html lang="en">
@@ -409,11 +417,29 @@ function renderHtml(report) {
   h2 { margin: 28px 0 10px; font-size: 13px; letter-spacing: 0.14em; color: #8b91a3; }
   .meta { color: #8b91a3; margin: 0 0 18px; }
   .counts { display: flex; gap: 10px; flex-wrap: wrap; margin: 0 0 8px; }
-  .count { padding: 8px 12px; background: #101218; border: 1px solid #2a2e3a; }
+  .count, .info-toggle {
+    padding: 8px 12px;
+    background: #101218;
+    border: 1px solid #2a2e3a;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
   .count b { display: block; font-size: 20px; }
   .count.error b { color: #ff3b4e; }
   .count.warn b { color: #ffd36a; }
+  .count.info b { color: #6ee7ff; }
   .count.ok b { color: #3dd68c; }
+  .count[aria-pressed="true"], .info-toggle[aria-pressed="true"] { border-color: #ffd36a; }
+  body.hide-info:not([data-filter="info"]) tr[data-sev="info"] { display: none; }
+  body[data-filter="error"] tr:not([data-sev="error"]) { display: none; }
+  body[data-filter="warn"] tr:not([data-sev="warn"]) { display: none; }
+  body[data-filter="info"] tr:not([data-sev="info"]) { display: none; }
+  body[data-filter="ok"] tr:not([data-sev="ok"]) { display: none; }
+  details summary { cursor: pointer; }
+  tr.sev-info td { color: #d5d8e2; }
+  tr.sev-info td.sev { color: #6ee7ff; }
   table { width: 100%; border-collapse: collapse; margin: 0 0 8px; }
   th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid #2a2e3a; vertical-align: top; }
   th { color: #8b91a3; font-weight: 600; cursor: pointer; background: #101218; }
@@ -434,17 +460,18 @@ function renderHtml(report) {
   }
 </style>
 </head>
-<body>
+<body class="hide-info">
 <main>
   <h1>${escapeHtml(title)}</h1>
   <p class="meta">v${escapeHtml(report.version)} · ${escapeHtml(report.generatedAt)} · sim ${escapeHtml(formatSim(report.clock.simTime))} · frame ${escapeHtml(report.clock.frame)} · ${escapeHtml(report.clock.frozen ? 'FREEZE' : `${formatNum(report.clock.timeScale)}x`)}<br>
   ${escapeHtml(report.url || 'n/a')} · viewport ${escapeHtml(viewport)}</p>
   <div class="counts">
-    <div class="count error"><b>${report.summary.error}</b>errors</div>
-    <div class="count warn"><b>${report.summary.warn}</b>warnings</div>
-    <div class="count info"><b>${report.summary.info}</b>info</div>
-    <div class="count ok"><b>${report.summary.ok}</b>ok</div>
+    <button type="button" class="count error" data-filter="error" aria-pressed="false"><b>${summary.error}</b>errors</button>
+    <button type="button" class="count warn" data-filter="warn" aria-pressed="false"><b>${summary.warn}</b>warnings</button>
+    <button type="button" class="count info" data-filter="info" aria-pressed="false"><b>${summary.info}</b>info</button>
+    <button type="button" class="count ok" data-filter="ok" aria-pressed="false"><b>${summary.ok}</b>ok</button>
   </div>
+  <p><button type="button" class="info-toggle" id="show-info" aria-pressed="false">mostra info (${summary.info})</button></p>
   <h2>CORE · LOG</h2>
   ${renderLogTable(report.logs)}
   <h2>CORE · SERIES</h2>
@@ -452,6 +479,31 @@ function renderHtml(report) {
   ${sections || '<h2>ADAPTERS</h2><p class="empty">No attached module exposed a snapshot.</p>'}
 </main>
 <script>
+(function () {
+  var root = document.body;
+  var filters = document.querySelectorAll('.count[data-filter]');
+  filters.forEach(function (button) {
+    button.addEventListener('click', function () {
+      var next = button.getAttribute('data-filter');
+      var current = root.getAttribute('data-filter') || '';
+      filters.forEach(function (other) { other.setAttribute('aria-pressed', 'false'); });
+      if (current === next) {
+        root.removeAttribute('data-filter');
+        return;
+      }
+      root.setAttribute('data-filter', next);
+      button.setAttribute('aria-pressed', 'true');
+    });
+  });
+  var infoButton = document.getElementById('show-info');
+  if (infoButton) {
+    infoButton.addEventListener('click', function () {
+      var show = root.classList.toggle('show-info');
+      root.classList.toggle('hide-info', !show);
+      infoButton.setAttribute('aria-pressed', show ? 'true' : 'false');
+    });
+  }
+})();
 document.querySelectorAll('table').forEach((table) => {
   table.querySelectorAll('thead th').forEach((th, index) => {
     th.addEventListener('click', () => {
@@ -485,7 +537,7 @@ function renderLogTable(logs) {
     if (!logs.length) return '<p class="empty">No log lines.</p>';
     const rows = logs.map((log) => {
         const severity = logSeverity(log);
-        return `<tr class="sev-${severity}"><td class="sev">${escapeHtml(severity)}</td><td>${escapeHtml(log.type)}</td><td>${escapeHtml(log.source)}</td><td>${escapeHtml(log.message)}</td><td>${escapeHtml(formatSim(log.simTime))}</td><td>${escapeHtml(log.frame)}</td></tr>`;
+        return `<tr class="sev-${severity}" data-sev="${severity}"><td class="sev">${escapeHtml(severity)}</td><td>${escapeHtml(log.type)}</td><td>${escapeHtml(log.source)}</td><td>${escapeHtml(log.message)}</td><td>${escapeHtml(formatSim(log.simTime))}</td><td>${escapeHtml(log.frame)}</td></tr>`;
     }).join('');
     return `<table>
 <thead><tr><th>severity</th><th>type</th><th>source</th><th>message</th><th>sim</th><th>frame</th></tr></thead>
@@ -498,7 +550,7 @@ function renderLogTable(logs) {
  */
 function renderSeriesTable(series) {
     if (!series.length) return '<p class="empty">No fps or metric samples.</p>';
-    const rows = series.map((entry) => `<tr class="sev-ok"><td>${escapeHtml(entry.name)}</td><td>${escapeHtml(formatNum(entry.min))}</td><td>${escapeHtml(formatNum(entry.avg))}</td><td>${escapeHtml(formatNum(entry.max))}</td><td>${escapeHtml(formatNum(entry.last))}</td><td>${entry.samples.length}</td></tr>`).join('');
+    const rows = series.map((entry) => `<tr class="sev-ok" data-sev="ok"><td>${escapeHtml(entry.name)}</td><td>${escapeHtml(formatNum(entry.min))}</td><td>${escapeHtml(formatNum(entry.avg))}</td><td>${escapeHtml(formatNum(entry.max))}</td><td>${escapeHtml(formatNum(entry.last))}</td><td>${entry.samples.length}</td></tr>`).join('');
     return `<table>
 <thead><tr><th>name</th><th>min</th><th>avg</th><th>max</th><th>last</th><th>samples</th></tr></thead>
 <tbody>${rows}</tbody>
@@ -510,15 +562,96 @@ function renderSeriesTable(series) {
  */
 function renderSection(section) {
     const title = escapeHtml(section.name);
-    if (!section.items.length) {
+    const items = section.items;
+    if (!items.length) {
         return `<h2>${title}</h2><p class="empty">No rows.</p>`;
     }
-    const rows = section.items.map((item) => `<tr class="sev-${item.severity}"><td class="sev">${escapeHtml(item.severity)}</td><td>${escapeHtml(item.selector)}</td><td>${escapeHtml(item.rule)}</td><td>${escapeHtml(item.value)}</td><td>${escapeHtml(item.source)}</td></tr>`).join('');
+    const rows = items.map((item) => renderItemRow(item)).join('');
     return `<h2>${title}</h2>
 <table>
 <thead><tr><th>severity</th><th>selector</th><th>rule</th><th>value</th><th>source</th></tr></thead>
 <tbody>${rows}</tbody>
 </table>`;
+}
+
+function renderItemRow(item) {
+    const severity = item.severity;
+    const selector = item.selectors ? renderSelectorList(item.selectors) : escapeHtml(item.selector);
+    return `<tr class="sev-${severity}" data-sev="${severity}"><td class="sev">${escapeHtml(severity)}</td><td>${selector}</td><td>${escapeHtml(item.rule)}</td><td>${escapeHtml(item.value)}</td><td>${escapeHtml(item.source)}</td></tr>`;
+}
+
+/**
+ * Same !important rule text, many elements: one HTML row. JSON rows stay separate.
+ * @param {ReportItem[]} items
+ */
+function groupImportantRows(items) {
+    const out = [];
+    const groups = new Map();
+    for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.rule !== '!important') {
+            out.push(item);
+            continue;
+        }
+        const key = String(item.value || '');
+        const prev = groups.get(key);
+        if (!prev) {
+            const group = {
+                severity: item.severity,
+                rule: item.rule,
+                value: item.value,
+                source: item.source,
+                selectors: [item.selector || '']
+            };
+            groups.set(key, group);
+            out.push(group);
+            continue;
+        }
+        prev.selectors.push(item.selector || '');
+        prev.severity = worseSeverity(prev.severity, item.severity);
+    }
+    return out;
+}
+
+function renderSelectorList(selectors) {
+    const unique = [];
+    const seen = new Set();
+    for (let i = 0; i < selectors.length; i++) {
+        const selector = selectors[i] || '';
+        if (seen.has(selector)) continue;
+        seen.add(selector);
+        unique.push(selector);
+    }
+    const label = `${unique.length} elementi`;
+    const list = unique.map((selector) => `<li>${escapeHtml(selector)}</li>`).join('');
+    return `<details><summary>${escapeHtml(label)}</summary><ul>${list}</ul></details>`;
+}
+
+function worseSeverity(current, next) {
+    const rank = { error: 0, warn: 1, info: 2, ok: 3 };
+    const left = rank[current] ?? 3;
+    const right = rank[next] ?? 3;
+    return right < left ? next : current;
+}
+
+function isFocusSkipOpacity(item) {
+    const text = `${item.rule || ''} ${item.value || ''}`;
+    if (!text.includes('invisible text (opacity 0)')) return false;
+    return /skip/i.test(String(item.selector || ''));
+}
+
+function htmlSummary(report, adapters) {
+    const summary = { error: 0, warn: 0, info: 0, ok: 0 };
+    for (let i = 0; i < adapters.length; i++) {
+        const items = adapters[i].items;
+        for (let j = 0; j < items.length; j++) {
+            const severity = items[j].severity;
+            if (summary[severity] != null) summary[severity] += 1;
+        }
+    }
+    const logs = Array.isArray(report.logs) ? report.logs : [];
+    for (let i = 0; i < logs.length; i++) summary[logSeverity(logs[i])] += 1;
+    return summary;
 }
 
 /**

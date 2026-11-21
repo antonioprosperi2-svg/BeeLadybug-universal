@@ -67,7 +67,7 @@ test('groupIssues conta i duplicati e ordina per gravità', () => {
     ]);
     assert.deepEqual(groups.map(formatIssue), [
         'article overflows viewport ×2',
-        'button click blocked by div',
+        'button possible click blocked (verify)',
         'span invisible text (transparent color)',
         'img distorted image',
         'h1 !important h1 { color: red }'
@@ -200,7 +200,7 @@ test('addCause raggruppa un blocco click in una sola riga', () => {
         }, 10);
     }
     assert.equal(list.length, 1);
-    assert.equal(formatCause(list[0]), 'body::after blocks clicks on 10 elements');
+    assert.equal(formatCause(list[0]), 'possible click blocked (verify)');
     assert.equal(list[0].targets.length, 10);
     assert.equal(describeCause('unreadable sheet: https://cdn.example/a.css', 'button'), null);
 });
@@ -364,7 +364,8 @@ test('snapshot gira con la hunt spenta e salta nascosti e admin', () => {
 
         const blocked = shot.items.find((item) => item.rule === 'click blocked');
         assert.equal(blocked.selector, 'div#mask');
-        assert.equal(blocked.value, 'div#mask blocks clicks on 2 elements');
+        assert.equal(blocked.severity, 'warn');
+        assert.equal(blocked.value, 'possible click blocked (verify)');
 
         const stack = shot.items.find((item) => item.rule === 'stacking context');
         assert.equal(stack.severity, 'info');
@@ -458,7 +459,8 @@ test('un font dentro un link non è il blocco dei click del genitore', () => {
         assert.equal(overflow[0].value, 'font overflows viewport');
         const blocked = shot.items.find((item) => item.rule === 'click blocked');
         assert.equal(blocked.selector, 'div#mask');
-        assert.equal(blocked.value, 'div#mask blocks clicks on 1 element');
+        assert.equal(blocked.severity, 'warn');
+        assert.equal(blocked.value, 'possible click blocked (verify)');
         css.detach();
     } finally {
         if (previousDocument === undefined) delete globalThis.document;
@@ -1088,7 +1090,8 @@ test('un click bloccato da un antenato non si segnala, un overlay esterno sì', 
     try {
         const blocked = css.snapshot().items.filter((item) => item.rule === 'click blocked');
         assert.equal(blocked.some((item) => item.selector === 'button#go'), false);
-        assert.equal(blocked.some((item) => item.value.includes('div#mask')), true);
+        assert.equal(blocked.some((item) => item.selector === 'div#mask' && item.severity === 'warn'), true);
+        assert.equal(blocked.every((item) => item.value === 'possible click blocked (verify)'), true);
     } finally {
         dom.restore();
         bee.destroy();
@@ -1119,6 +1122,48 @@ test('sr-only, aria-hidden e uno scroller non producono margini o testo invisibi
         assert.equal(items.some((item) => item.selector === 'span#sr' && item.rule === 'overflow'), false);
         const scrolled = items.find((item) => item.selector === 'span#inner' && item.rule === 'overflow');
         assert.equal(scrolled.severity, 'info');
+    } finally {
+        dom.restore();
+        bee.destroy();
+    }
+});
+
+test('un SVG o un banner cookie non generano click blocked', () => {
+    const play = box('BUTTON', 'play', { left: 10, top: 10, width: 80, height: 30, right: 90, bottom: 40 });
+    const icon = box('PATH', 'icon', { left: 10, top: 10, width: 80, height: 30, right: 90, bottom: 40 });
+    const accept = box('BUTTON', 'accept', { left: 200, top: 40, width: 80, height: 30, right: 280, bottom: 70 });
+    const banner = box('DIV', 'onetrust-banner', { left: 200, top: 40, width: 80, height: 30, right: 280, bottom: 70 });
+    banner.className = 'onetrust-pc-dark-filter';
+    const child = box('BUTTON', 'save', { left: 400, top: 40, width: 40, height: 20, right: 440, bottom: 60 });
+    child.parentElement = banner;
+    banner.contains = (node) => node === child;
+    const mask = box('DIV', 'mask', { left: 500, top: 40, width: 40, height: 20, right: 540, bottom: 60 });
+    const other = box('BUTTON', 'other', { left: 500, top: 40, width: 40, height: 20, right: 540, bottom: 60 });
+    const dom = installCssDom({
+        nodes: [play, accept, child, other],
+        hit: (x) => {
+            if (x < 100) return icon;
+            if (x < 300) return banner;
+            if (x < 450) return banner;
+            return mask;
+        }
+    });
+    const bee = makeCore();
+    const css = new CSSAdapter(bee);
+    css.attach();
+    try {
+        const items = css.snapshot().items;
+        const blocked = items.filter((item) => item.rule === 'click blocked');
+        assert.equal(blocked.some((item) => item.selector === 'path#icon'), false);
+        assert.equal(blocked.some((item) => item.selector === 'div#onetrust-banner'), false);
+        assert.equal(blocked.some((item) => item.selector === 'button#save'), false);
+        assert.equal(blocked.length, 1);
+        assert.equal(blocked[0].selector, 'div#mask');
+        assert.equal(blocked[0].severity, 'warn');
+        assert.equal(blocked[0].value, 'possible click blocked (verify)');
+        const cookies = items.filter((item) => item.value === 'cookie banner open, covering page');
+        assert.equal(cookies.length, 1);
+        assert.equal(cookies[0].severity, 'info');
     } finally {
         dom.restore();
         bee.destroy();

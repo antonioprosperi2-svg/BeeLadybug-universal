@@ -5,7 +5,7 @@
 [![download](https://img.shields.io/npm/dm/bee-ladybug)](https://www.npmjs.com/package/bee-ladybug)
 [![](https://data.jsdelivr.com/v1/package/npm/bee-ladybug/badge)](https://www.jsdelivr.com/package/npm/bee-ladybug)
 ![licenza](https://img.shields.io/npm/l/bee-ladybug)
-[![Socket Badge](https://badge.socket.dev/npm/package/bee-ladybug/0.6.13)](https://badge.socket.dev/npm/package/bee-ladybug/0.6.13)
+[![Socket Badge](https://badge.socket.dev/npm/package/bee-ladybug/0.6.14)](https://badge.socket.dev/npm/package/bee-ladybug/0.6.14)
 [![size](https://img.shields.io/bundlephobia/minzip/bee-ladybug)](https://bundlephobia.com/package/bee-ladybug)
 [![Snyk](https://snyk.io/test/npm/bee-ladybug/badge.svg)](https://security.snyk.io/package/npm/bee-ladybug)
 
@@ -24,7 +24,7 @@ dark console.
 
 > Il Core non sa cosa sta monitorando. Riceve solo dati grezzi.
 
-Versione attuale: **0.6.13** (`package.json` e `BEE_LADYBUG_VERSION`).
+Versione attuale: **0.6.14** (`package.json` e `BEE_LADYBUG_VERSION`).
 
 ## Perché questa struttura
 
@@ -366,7 +366,7 @@ npm login
 npm publish --access public
 ```
 
-Versione runtime e pacchetto: **0.6.13** (`BEE_LADYBUG_VERSION` e `package.json` devono restare uguali).
+Versione runtime e pacchetto: **0.6.14** (`BEE_LADYBUG_VERSION` e `package.json` devono restare uguali).
 
 ## Assistente AI (gancio, nessun vendor)
 
@@ -440,7 +440,7 @@ bee.destroy();
 
 ## Roadmap
 
-1. **0.6.13** — Core, adapter Canvas, DOM, CSS, Ant e Spider, PythonBridge, registro dei toggle, gancio AI multi-provider, export HTML/JSON/CSV, CSS hunt, pannello ridimensionabile con WIDE/COMPACT, trascinabile dall'header e riducibile a una pillola con la coccinella e gli FPS. L'overlay canvas resta trasparente anche se la pagina colora tutti i `canvas`. L'HUD ha lo sfondo opaco su ogni sezione. Le segnalazioni CSS ripetute stanno su una riga, e `error` resta solo per ciò che si vede. L'estensione, su una pagina con canvas, avvia solo CanvasAdapter e legge le entità da `window.__BEE_ENTITIES__`. Il popup si chiude dopo l'iniezione. È la versione in `package.json` e in `BEE_LADYBUG_VERSION`.
+1. **0.6.14** — Core, adapter Canvas, DOM, CSS, Ant e Spider, PythonBridge, registro dei toggle, gancio AI multi-provider, export HTML/JSON/CSV, CSS hunt, pannello ridimensionabile con WIDE/COMPACT, trascinabile dall'header e riducibile a una pillola con la coccinella e gli FPS. L'overlay canvas resta trasparente anche se la pagina colora tutti i `canvas`. L'HUD ha lo sfondo opaco su ogni sezione. Le segnalazioni CSS ripetute stanno su una riga, e `error` resta solo per ciò che si vede. Il file HTML di F8 filtra le gravità e raggruppa le regole `!important`. L'estensione, su una pagina con canvas, avvia solo CanvasAdapter e legge le entità da `window.__BEE_ENTITIES__`. Il popup si chiude dopo l'iniezione. È la versione in `package.json` e in `BEE_LADYBUG_VERSION`.
 
 ## Chrome extension
 

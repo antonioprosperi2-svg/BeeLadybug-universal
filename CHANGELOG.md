@@ -2,6 +2,11 @@
 <p align="center">
   <img src="https://beeenginejs.com/wp-content/uploads/2026/10/beeladybug-logo-animato-ezgif.com-effects.gif" alt="BeeEngine Logo" width="900" />
 </p>
+## 0.6.14
+
+- The F8 HTML report filters every table from the severity counters and hides info rows until "mostra info (N)". Identical `!important` rules become one row with the element list in a details block. Skip-to-content controls that are invisible only until focus are left out of that file.
+- Click blocked is a warning, "possible click blocked (verify)", and is skipped for SVG shapes and for a parent or child of the covered element. A cookie or consent banner does not raise click blocked; the report keeps one info row, "cookie banner open, covering page".
+
 ## 0.6.13
 
 - `!important` longhands from one CSS rule are one row, with `×N` when the same rule or cause repeats. Stacking context is info unless `elementFromPoint` shows the element is really covered. Click blockers ignore ancestors and descendants. sr-only, `aria-hidden`, scroll containers and unloaded lazy images are not reported as visible bugs. `!important`, negative margins, stacking and overflow inside a scroller are info.
