@@ -1,5 +1,8 @@
 
+
+
 # BeeLadybug
+[![Chrome Web Store](https://img.shields.io/badge/Chrome%20Web%20Store-Install-blue?logo=googlechrome)](https://chrome.google.com/webstore/detail/hoeblomajmbdbgkklcggiiolhigfkpak)
 [![types](https://img.shields.io/npm/types/bee-ladybug)](https://www.npmjs.com/package/bee-ladybug)
 [![npm](https://img.shields.io/npm/v/bee-ladybug)](https://www.npmjs.com/package/bee-ladybug)
 [![download](https://img.shields.io/npm/dm/bee-ladybug)](https://www.npmjs.com/package/bee-ladybug)
