@@ -1,4 +1,15 @@
-# Changelog
+# Changelog 
+[![Chrome Web Store](https://img.shields.io/badge/Chrome%20Web%20Store-Install-blue?logo=googlechrome)](https://chrome.google.com/webstore/detail/hoeblomajmbdbgkklcggiiolhigfkpak)
+[![View sample report](https://img.shields.io/badge/View%20sample%20report-HTML-ff3b5c?style=flat)](https://beeenginejs.com/wp-content/uploads/2026/11/report-20261122-1736.html)
+[![types](https://img.shields.io/npm/types/bee-ladybug)](https://www.npmjs.com/package/bee-ladybug)
+[![npm](https://img.shields.io/npm/v/bee-ladybug)](https://www.npmjs.com/package/bee-ladybug)
+[![download](https://img.shields.io/npm/dm/bee-ladybug)](https://www.npmjs.com/package/bee-ladybug)
+[![](https://data.jsdelivr.com/v1/package/npm/bee-ladybug/badge)](https://www.jsdelivr.com/package/npm/bee-ladybug)
+![licenza](https://img.shields.io/npm/l/bee-ladybug)
+[![Socket Badge](https://badge.socket.dev/npm/package/bee-ladybug/0.6.14)](https://badge.socket.dev/npm/package/bee-ladybug/0.6.14)
+[![size](https://img.shields.io/bundlephobia/minzip/bee-ladybug)](https://bundlephobia.com/package/bee-ladybug)
+[![Snyk](https://snyk.io/test/npm/bee-ladybug/badge.svg)](https://security.snyk.io/package/npm/bee-ladybug)
+
 <p align="center">
   <img src="https://beeenginejs.com/wp-content/uploads/2026/10/beeladybug-logo-animato-ezgif.com-effects.gif" alt="BeeEngine Logo" width="900" />
 </p>
