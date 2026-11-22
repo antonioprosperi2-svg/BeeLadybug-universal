@@ -13,6 +13,7 @@
 <p align="center">
   <img src="https://beeenginejs.com/wp-content/uploads/2026/10/beeladybug-logo-animato-ezgif.com-effects.gif" alt="BeeEngine Logo" width="900" />
 </p>
+
 ## 0.6.14
 
 - The F8 HTML report filters every table from the severity counters and hides info rows until "mostra info (N)". Identical `!important` rules become one row with the element list in a details block. Skip-to-content controls that are invisible only until focus are left out of that file.
